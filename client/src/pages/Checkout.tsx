@@ -1,230 +1,218 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  CheckIcon,
-  ChevronRightIcon,
-  CreditCardIcon,
-  MapPinIcon,
-} from "lucide-react";
-import toast from "react-hot-toast";
+import { ArrowLeft, CreditCard, ShieldCheck, CheckCircle2, Loader2 } from "lucide-react";
+import api from "@/api/axios";
 
-import { useCart } from "../context/CartContext";
-import type { Address } from "../types";
-import CheckoutAddress from "../components/Checkout/CheckoutAddress";
-import CheckoutPayment from "../components/Checkout/CheckoutPayment";
-import CheckoutReview from "../components/Checkout/CheckoutReview";
-import api from "../config/api";
-import { useAuth } from "../context/AuthContext";
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image: string;
+}
 
-const Checkout = () => {
+interface CheckoutProps {
+  cartItems?: CartItem[];
+  totalAmount?: number;
+  onSuccess?: () => void;
+}
+
+const Checkout = ({ cartItems = [], totalAmount = 0, onSuccess }: CheckoutProps) => {
   const navigate = useNavigate();
-  const currency = import.meta.env.VITE_CURRENCY_SYMBOL || "₹";
-
-  const { items, cartTotal, clearCart } = useCart();
-  const { user } = useAuth();
-
-  const [step, setStep] = useState("address");
   const [loading, setLoading] = useState(false);
-
-  const [address, setAddress] = useState<Address>({
-    id: "",
-    label: "Home",
+  const [error, setError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "cod">("card");
+  const [formData, setFormData] = useState({
+    fullName: "",
+    email: "",
     address: "",
     city: "",
-    state: "",
-    zip: "",
-    isDefault: false,
-    lat: 0,
-    lng: 0,
+    zipCode: "",
   });
 
-  const [paymentMethod, setPaymentMethod] = useState("card");
+  const shippingFee = 5.0;
+  const finalTotal = totalAmount + shippingFee;
 
-  const deliveryFee = cartTotal > 20 ? 0 : 1.99;
-  const tax = cartTotal * 0.08;
-  const total = cartTotal + deliveryFee + tax;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
-  const steps: { key: string; label: string; icon: typeof MapPinIcon }[] = [
-    { key: "address", label: "Address", icon: MapPinIcon },
-    { key: "payment", label: "Payment", icon: CreditCardIcon },
-    { key: "review", label: "Review", icon: CheckIcon },
-  ];
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
 
-  const handlePlaceOrder = async () => {
+    if (!formData.fullName || !formData.address || !formData.city) {
+      setError("Please fill in all required shipping fields.");
+      return;
+    }
+
     setLoading(true);
+
     try {
-      const orderData = {
-        items: items.map((item) => ({
-          product: item.product.id,
-          quantity: item.quantity,
-        })),
-        shippingAddress: address,
+      await api.post("/orders", {
+        items: cartItems,
+        shippingAddress: formData,
         paymentMethod,
-      };
+        totalPrice: finalTotal,
+      });
 
-      const { data } = await api.post("/orders", orderData);
-      console.log(data);
-
-      if (data.url) {
-        window.location.href = data.url;
-        return;
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        navigate("/orders");
       }
-      clearCart();
-      toast.success("Order placed successfully!");
-      navigate(`/orders/${data.order.id}`);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || error.message);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Failed to place order. Please try again.");
     } finally {
       setLoading(false);
-      scrollTo(0, 0);
     }
   };
 
-  // Populate address from user's default address
-  useState(() => {
-    if (user?.addresses?.length) {
-      const defaultAddr =
-        user.addresses.find((a) => a.isDefault) || user.addresses[0];
-      setAddress({
-        id: defaultAddr?.id,
-        label: defaultAddr?.label,
-        address: defaultAddr?.address,
-        city: defaultAddr?.city,
-        state: defaultAddr?.state,
-        zip: defaultAddr?.zip,
-        isDefault: defaultAddr?.isDefault,
-        lat: defaultAddr?.lat,
-        lng: defaultAddr?.lng,
-      });
-    }
-  });
-
-  if (items.length === 0) {
-    return (
-      <div className="min-h-screen bg-app-cream flex-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-app-green mb-2">
-            Your cart is empty
-          </h2>
-          <p className="text-sm text-app-text-light mb-4">
-            Add some products to checkout
-          </p>
-          <button
-            onClick={() => navigate("/products")}
-            className="px-5 py-2.5 bg-app-green text-white text-sm font-medium rounded-xl hover:bg-app-green-light transition-colors"
-          >
-            Browse Products
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-app-cream">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm text-app-text-light hover:text-app-green mb-6 transition-colors"
-        >
-          <ArrowLeft className="size-4" /> Back
-        </button>
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-2 text-sm text-app-text-light hover:text-app-green mb-6 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" /> Back to Cart
+      </button>
 
-        <h1 className="text-2xl font-semibold text-app-green mb-8">Checkout</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 bg-white p-6 sm:p-8 rounded-3xl border border-app-border shadow-sm">
+          <h2 className="text-xl font-bold text-app-green mb-6">Checkout & Shipping</h2>
 
-        {/* Steps */}
-        <div className="flex items-center gap-2 mb-8">
-          {steps.map((s, i) => (
-            <div key={s.key} className="flex items-center gap-2">
-              <button
-                onClick={() => setStep(s.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${step === s.key ? "bg-app-green text-white" : "bg-white text-app-text-light"}`}
-              >
-                <s.icon className="size-4" /> {s.label}
-                {i < steps.length - 1 && (
-                  <ChevronRightIcon className="size-4 text-app-text-light" />
-                )}
-              </button>
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
+              {error}
             </div>
-          ))}
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-app-green mb-1">Full Name *</label>
+              <input
+                type="text"
+                name="fullName"
+                value={formData.fullName}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
+                placeholder="John Doe"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-app-green mb-1">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
+                  placeholder="john@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-app-green mb-1">City *</label>
+                <input
+                  type="text"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
+                  placeholder="Gaza"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-app-green mb-1">Address *</label>
+              <input
+                type="text"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
+                placeholder="Street name, building number"
+                required
+              />
+            </div>
+
+            <div className="pt-4 border-t border-app-border">
+              <label className="block text-sm font-medium text-app-green mb-3">Payment Method</label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("card")}
+                  className={`p-4 rounded-2xl border text-center text-sm font-medium transition-colors ${
+                    paymentMethod === "card"
+                      ? "border-app-green bg-app-cream text-app-green"
+                      : "border-app-border hover:bg-gray-50 text-app-text-light"
+                  }`}
+                >
+                  <CreditCard className="w-5 h-5 mx-auto mb-1" />
+                  Credit Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("cod")}
+                  className={`p-4 rounded-2xl border text-center text-sm font-medium transition-colors ${
+                    paymentMethod === "cod"
+                      ? "border-app-green bg-app-cream text-app-green"
+                      : "border-app-border hover:bg-gray-50 text-app-text-light"
+                  }`}
+                >
+                  <ShieldCheck className="w-5 h-5 mx-auto mb-1" />
+                  Cash on Delivery
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-6 py-3 bg-app-green text-white font-medium rounded-xl hover:bg-app-green-light transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Processing Order...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> Place Order (${finalTotal.toFixed(2)})
+                </>
+              )}
+            </button>
+          </form>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Main Form */}
-          <div className="md:col-span-2">
-            {step === "address" && (
-              <CheckoutAddress
-                address={address}
-                setAddress={setAddress}
-                setStep={setStep}
-                user={user}
-              />
-            )}
-
-            {step === "payment" && (
-              <CheckoutPayment
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-                setStep={setStep}
-              />
-            )}
-
-            {step === "review" && (
-              <CheckoutReview
-                address={address}
-                items={items}
-                handlePlaceOrder={handlePlaceOrder}
-                loading={loading}
-                total={total}
-              />
-            )}
+        <div className="bg-white p-6 rounded-3xl border border-app-border shadow-sm h-fit">
+          <h3 className="text-lg font-bold text-app-green mb-4">Order Summary</h3>
+          <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+            {cartItems.map((item) => (
+              <div key={item.id} className="flex justify-between items-center text-sm">
+                <span className="text-app-text-light">
+                  {item.name} x {item.quantity}
+                </span>
+                <span className="font-medium">${(item.price * item.quantity).toFixed(2)}</span>
+              </div>
+            ))}
           </div>
 
-          {/* Order Summary Sidebar */}
-          <div className="bg-white rounded-2xl p-5 h-fit sticky top-24">
-            <h3 className="text-sm font-semibold text-app-green mb-4">
-              Order Summary
-            </h3>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-app-text-light">
-                  Subtotal ({items.length} items)
-                </span>
-                <span>
-                  {currency}
-                  {cartTotal.toFixed(2)}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-app-text-light">Delivery</span>
-                <span>
-                  {deliveryFee === 0 ? (
-                    <span className="text-app-success">Free</span>
-                  ) : (
-                    `${currency}${deliveryFee.toFixed(2)}`
-                  )}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-app-text-light">Tax</span>
-                <span>
-                  {currency}
-                  {tax.toFixed(2)}
-                </span>
-              </div>
-
-              <div className="flex justify-between pt-3 border-t border-app-border text-base font-semibold">
-                <span>Total</span>
-                <span className="text-app-green">
-                  {currency}
-                  {total.toFixed(2)}
-                </span>
-              </div>
+          <div className="border-t border-app-border pt-3 space-y-2 text-sm">
+            <div className="flex justify-between text-app-text-light">
+              <span>Subtotal</span>
+              <span>${totalAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-app-text-light">
+              <span>Shipping</span>
+              <span>${shippingFee.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-base font-bold text-app-green pt-2 border-t border-app-border">
+              <span>Total</span>
+              <span>${finalTotal.toFixed(2)}</span>
             </div>
           </div>
         </div>
