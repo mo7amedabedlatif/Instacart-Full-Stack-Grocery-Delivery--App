@@ -1,134 +1,202 @@
-import { XIcon } from "lucide-react";
+import { useState, FormEvent, ChangeEvent } from "react";
+import { MapPin, Loader2, Save, X } from "lucide-react";
+import api from "@/api/axios";
 
-const AddressForm = ({
-  resetForm,
-  handleSubmit,
-  form,
-  setForm,
-  editingId,
-}: any) => {
+export interface AddressData {
+  id?: string;
+  street: string;
+  building: string;
+  city: string;
+  phone: string;
+  isDefault?: boolean;
+}
+
+interface AddressFormProps {
+  initialData?: AddressData | null;
+  onSuccess?: (address: AddressData) => void;
+  onCancel?: () => void;
+}
+
+const AddressForm = ({ initialData, onSuccess, onCancel }: AddressFormProps) => {
+  const isEdit = Boolean(initialData?.id);
+
+  const [formData, setFormData] = useState<AddressData>({
+    street: initialData?.street || "",
+    building: initialData?.building || "",
+    city: initialData?.city || "Gaza",
+    phone: initialData?.phone || "",
+    isDefault: initialData?.isDefault || false,
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    if (type === "checkbox") {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData((prev) => ({ ...prev, [name]: checked }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!formData.street.trim() || !formData.city.trim() || !formData.phone.trim()) {
+      setError("Please fill out all required fields.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      let response;
+      if (isEdit && initialData?.id) {
+        response = await api.put(`/addresses/${initialData.id}`, formData);
+      } else {
+        response = await api.post("/addresses", formData);
+      }
+
+      const savedAddress = response.data?.address || formData;
+      if (onSuccess) onSuccess(savedAddress);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Failed to save address. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <>
-      {/* overlay  */}
-      <div className="fixed inset-0 bg-black/40 z-50" />
+    <div className="bg-white p-6 rounded-3xl border border-app-border shadow-sm max-w-lg mx-auto">
+      <div className="flex items-center justify-between pb-4 mb-4 border-b border-app-border">
+        <div className="flex items-center gap-2 text-app-green font-bold text-lg">
+          <MapPin className="w-5 h-5" />
+          {isEdit ? "Edit Delivery Address" : "Add New Address"}
+        </div>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="p-1 text-app-text-light hover:text-app-green rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
-      {/* form container  */}
-      <div onClick={resetForm} className="fixed inset-0 z-50 flex-center p-4">
-        <form
-          onClick={(e) => e.stopPropagation()}
-          onSubmit={handleSubmit}
-          className="bg-white rounded-2xl p-6 w-full max-w-lg animate-fade-in"
-        >
-          {/* form header  */}
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-app-green">
-              {editingId ? "Edit Address" : "Add New Address"}
-            </h2>
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold text-app-green mb-1">
+            City *
+          </label>
+          <input
+            type="text"
+            name="city"
+            value={formData.city}
+            onChange={handleChange}
+            placeholder="e.g. Gaza"
+            className="w-full px-3.5 py-2 rounded-xl border border-app-border focus:border-app-green outline-none text-sm transition-colors"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-app-green mb-1">
+            Street Address *
+          </label>
+          <input
+            type="text"
+            name="street"
+            value={formData.street}
+            onChange={handleChange}
+            placeholder="Main St., Near Al-Azhar"
+            className="w-full px-3.5 py-2 rounded-xl border border-app-border focus:border-app-green outline-none text-sm transition-colors"
+            required
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-app-green mb-1">
+              Building / Apartment
+            </label>
+            <input
+              type="text"
+              name="building"
+              value={formData.building}
+              onChange={handleChange}
+              placeholder="Apt 4B"
+              className="w-full px-3.5 py-2 rounded-xl border border-app-border focus:border-app-green outline-none text-sm transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-app-green mb-1">
+              Phone Number *
+            </label>
+            <input
+              type="tel"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              placeholder="059xxxxxxx"
+              className="w-full px-3.5 py-2 rounded-xl border border-app-border focus:border-app-green outline-none text-sm transition-colors"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-2">
+          <input
+            type="checkbox"
+            id="isDefault"
+            name="isDefault"
+            checked={formData.isDefault}
+            onChange={handleChange}
+            className="w-4 h-4 text-app-green border-app-border rounded focus:ring-app-green cursor-pointer"
+          />
+          <label htmlFor="isDefault" className="text-xs text-app-text-light cursor-pointer select-none">
+            Set as default shipping address
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4 border-t border-app-border">
+          {onCancel && (
             <button
               type="button"
-              onClick={resetForm}
-              className="p-2 hover:bg-app-cream rounded-lg"
+              onClick={onCancel}
+              disabled={loading}
+              className="px-4 py-2 text-sm text-app-text-light hover:bg-app-cream rounded-xl transition-colors border border-app-border"
             >
-              <XIcon className="size-5" />
+              Cancel
             </button>
-          </div>
-
-          {/* form input fields  */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-app-green mb-1.5">
-                Label
-              </label>
-              <input
-                type="text"
-                placeholder="Home, Work, etc."
-                required
-                className="w-full px-4 py-2.5 text-sm rounded-xl border border-app-border focus:border-app-green outline-none"
-                value={form.label}
-                onChange={(e) => setForm({ ...form, label: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-app-green mb-1.5">
-                Street Address
-              </label>
-              <input
-                type="text"
-                required
-                className="w-full px-4 py-2.5 text-sm rounded-xl border border-app-border focus:border-app-green outline-none"
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-app-green mb-1.5">
-                  City
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-app-border focus:border-app-green outline-none"
-                  value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-app-green mb-1.5">
-                  State
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-app-border focus:border-app-green outline-none"
-                  value={form.state}
-                  onChange={(e) => setForm({ ...form, state: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-app-green mb-1.5">
-                  ZIP Code
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-app-border focus:border-app-green outline-none"
-                  value={form.zip}
-                  onChange={(e) => setForm({ ...form, zip: e.target.value })}
-                />
-              </div>
-
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.isDefault}
-                    onChange={(e) =>
-                      setForm({ ...form, isDefault: e.target.checked })
-                    }
-                  />
-                  <span className="text-sm text-app-text">Set as default</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* submit button  */}
+          )}
           <button
             type="submit"
-            className="mt-6 w-full py-3 bg-app-green text-white font-semibold rounded-xl hover:bg-app-green-light transition-colors"
+            disabled={loading}
+            className="px-5 py-2 bg-app-green text-white text-sm font-medium rounded-xl hover:bg-app-green-light transition-colors flex items-center gap-2 disabled:opacity-50"
           >
-            {editingId ? "Update Address" : "Save Address"}
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" /> Save Address
+              </>
+            )}
           </button>
-        </form>
-      </div>
-    </>
+        </div>
+      </form>
+    </div>
   );
 };
 
