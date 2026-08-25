@@ -1,38 +1,77 @@
-import { MailIcon } from "lucide-react";
+import { useState, FormEvent } from "react";
+import { Mail, CheckCircle2, Loader2 } from "lucide-react";
+import api from "@/api/axios";
 
 const Newsletter = () => {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !email.includes("@")) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await api.post("/newsletter/subscribe", { email });
+      setSubscribed(true);
+      setEmail("");
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message || "Failed to subscribe. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <section className="bg-white py-18 px-4 sm:px-6 lg:px-8 rounded-3xl mx-auto  shadow-xs mt-32 mb-20">
-      <div className="max-w-2xl mx-auto text-center">
-        <div className="size-16 bg-white rounded-xl flex-center mx-auto mb-6 shadow">
-          <MailIcon className="size-8 text-app-green" strokeWidth={1.5} />
+    <section className="bg-app-cream border-y border-app-border py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto text-center">
+        <div className="size-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 border border-app-border shadow-sm text-app-green">
+          <Mail className="w-6 h-6" />
         </div>
-        <h2 className="text-3xl font-semibold text-app-green mb-4">
-          Subscribe to our Newsletter
+
+        <h2 className="text-2xl sm:text-3xl font-bold text-app-green mb-2">
+          Subscribe to Our Newsletter
         </h2>
-        <p className="text-app-text-light mb-8 text-base">
-          Get weekly updates on fresh produce, seasonal offers, and exclusive
-          discounts right to your inbox.
+        <p className="text-sm text-app-text-light mb-6">
+          Get weekly updates on fresh produce, organic recipes, and exclusive store discounts directly to your inbox.
         </p>
 
-        <form
-          onSubmit={(e) => e.preventDefault()}
-          className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
-        >
-          <input
-            type="email"
-            placeholder="Enter your email address"
-            required
-            className="flex-1 px-5 py-3.5 rounded-xl border border-app-border focus:border-app-green focus:ring bg-white text-sm transition-all"
-          />
-
-          <button
-            type="submit"
-            className="px-8 py-3.5 bg-app-green text-white font-semibold rounded-xl hover:bg-app-green-light transition-colors shadow-sm whitespace-nowrap active:scale-[0.98]"
-          >
-            Subscribe
-          </button>
-        </form>
+        {subscribed ? (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl inline-flex items-center gap-2 text-emerald-800 text-sm font-medium">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            Thank you for subscribing!
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-3">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email address"
+                disabled={loading}
+                className="flex-1 px-4 py-3 rounded-xl border border-app-border focus:border-app-green outline-none text-sm bg-white"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-3 bg-app-green text-white font-medium text-sm rounded-xl hover:bg-app-green-light transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Subscribe"}
+              </button>
+            </div>
+            {error && <p className="text-xs text-red-500 text-left">{error}</p>}
+          </form>
+        )}
       </div>
     </section>
   );
