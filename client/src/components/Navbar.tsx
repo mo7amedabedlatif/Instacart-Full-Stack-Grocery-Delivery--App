@@ -1,200 +1,156 @@
-import {
-  ArrowUpRightIcon,
-  BikeIcon,
-  ChevronDownIcon,
-  LogOutIcon,
-  MapPinIcon,
-  MenuIcon,
-  PackageIcon,
-  SearchIcon,
-  ShieldIcon,
-  ShoppingCartIcon,
-  UserIcon,
-  XIcon,
-} from "lucide-react";
-import React, { useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ShoppingBag, User, LogOut, Shield, Menu, X } from "lucide-react";
 
-import { useCart } from "../context/CartContext";
-import { useAuth } from "../context/AuthContext";
+interface NavbarProps {
+  cartCount?: number;
+}
 
-const Navbar = () => {
-  const { user, logout } = useAuth();
-  const { cartCount, setIsCartOpen } = useCart();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
+const Navbar = ({ cartCount = 0 }: NavbarProps) => {
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleSearch = (e: React.SubmitEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchQuery("");
-    }
-  };
+  const token = localStorage.getItem("token");
+  const userRole = localStorage.getItem("role");
+  const isAuthenticated = Boolean(token);
+  const isAdmin = userRole === "admin";
 
   const handleLogout = () => {
-    logout();
-    setUserMenuOpen(false);
-    navigate("/");
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    navigate("/login");
   };
 
   return (
-    <nav className="bg-white sticky top-0 z-50 border-b border-app-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 gap-4">
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-app-border">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo */}
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-[22px] font-medium shrink-0"
-        >
-          <BikeIcon size={24} /> Instacart
+        <Link to="/" className="text-xl font-bold text-app-green tracking-tight">
+          Fresh<span className="text-emerald-500">Store</span>
         </Link>
 
-        <div className="w-full flex items-center justify-end gap-4 lg:gap-10">
-          {/* Nav Links - Desktop */}
-          <div className="hidden md:flex items-center gap-6 text-sm text-zinc-600">
-            <Link to="/">Home</Link>
-            <Link to="/products">Products</Link>
-            <Link to="/deals" className="text-app-orange">
-              Deals
-            </Link>
-          </div>
-          {/* Search */}
-          <form
-            onSubmit={handleSearch}
-            className="hidden sm:flex flex-1 max-w-sm text-xs sm:text-sm"
-          >
-            <div className="relative w-full">
-              <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-              <input
-                type="text"
-                placeholder="Search for groceries..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 p-2 bg-orange-50 rounded-full ring ring-app-orange/15 focus:ring-app-orange/30"
-              />
-            </div>
-          </form>
-
-          {/* Right Actions */}
-          <div className="flex items-center gap-3">
-            {/* Cart */}
-            <button
-              className="relative p-2 rounded-xl"
-              onClick={() => setIsCartOpen(true)}
+        {/* Desktop Links */}
+        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-app-text-light">
+          <Link to="/" className="hover:text-app-green transition-colors">
+            Home
+          </Link>
+          <Link to="/products" className="hover:text-app-green transition-colors">
+            Products
+          </Link>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className="hover:text-app-green transition-colors flex items-center gap-1.5 text-emerald-600 font-semibold"
             >
-              <ShoppingCartIcon className="size-5 text-zinc-900" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 size-4 bg-app-orange text-white text-[10px] rounded-full flex-center">
-                  {cartCount}
-                </span>
-              )}
-            </button>
-            {/* User */}
-            <div className="relative">
-              {user ? (
-                <button
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 p-2"
-                >
-                  <div className="size-7 rounded-full bg-green-950 text-white flex-center">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <ChevronDownIcon className="size-3 text-zinc-500" />
-                </button>
-              ) : (
-                <div className="flex-center gap-2">
-                  <Link
-                    to="/login"
-                    className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-950 rounded-full hover:bg-green-950-light transition-colors"
-                  >
-                    <UserIcon size={16} /> Sign In
-                  </Link>
-                  {userMenuOpen ? (
-                    <XIcon
-                      className="md:hidden"
-                      onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    />
-                  ) : (
-                    <MenuIcon
-                      className="md:hidden"
-                      onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    />
-                  )}
-                </div>
-              )}
+              <Shield className="w-4 h-4" /> Admin Dashboard
+            </Link>
+          )}
+        </nav>
 
-              {userMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setUserMenuOpen(false)}
-                  />
-                  <div className="absolute right-0 mt-2.5 w-56 bg-white rounded-xl shadow-lg border border-app-border py-2 z-50 animate-fade-in">
-                    {user && (
-                      <div className="px-4 py-2 border-b border-app-border">
-                        <p className="text-sm font-medium text-zinc-900">
-                          {user?.name}
-                        </p>
-                        <p className="text-xs text-zinc-500">{user?.email}</p>
-                      </div>
-                    )}
-                    <div onClick={() => setUserMenuOpen(false)}>
-                      {!user && (
-                        <Link to="/login" className="dropdown-link">
-                          <UserIcon size={16} /> Sign In{" "}
-                        </Link>
-                      )}
+        {/* Right Actions */}
+        <div className="hidden md:flex items-center gap-4">
+          <Link
+            to="/cart"
+            className="relative p-2.5 text-app-green hover:bg-app-cream rounded-xl transition-colors"
+          >
+            <ShoppingBag className="w-5 h-5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] font-bold size-5 rounded-full flex items-center justify-center border-2 border-white">
+                {cartCount}
+              </span>
+            )}
+          </Link>
 
-                      {user && (
-                        <Link to="/orders" className="dropdown-link">
-                          <PackageIcon size={16} /> My Orders{" "}
-                        </Link>
-                      )}
-
-                      {user && (
-                        <Link to="/addresses" className="dropdown-link">
-                          <MapPinIcon size={16} /> Addresses{" "}
-                        </Link>
-                      )}
-
-                      <Link to="/products" className="dropdown-link md:hidden">
-                        <ArrowUpRightIcon size={16} /> Products{" "}
-                      </Link>
-
-                      <Link to="/deals" className="dropdown-link md:hidden">
-                        <ArrowUpRightIcon size={16} /> Deals{" "}
-                      </Link>
-                      {user?.isAdmin && (
-                        <Link to="/admin/products" className="dropdown-link">
-                          <ShieldIcon
-                            className="text-app-orange-dark"
-                            size={16}
-                          />{" "}
-                          <span className="text-app-orange-dark">
-                            Admin Panel
-                          </span>{" "}
-                        </Link>
-                      )}
-                      {user && (
-                        <div className="border-t border-app-border pt-1">
-                          <button
-                            onClick={handleLogout}
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-app-error hover:bg-red-50 w-full transition-colors"
-                          >
-                            <LogOutIcon size={16} /> Logout
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              <Link
+                to="/profile"
+                className="p-2.5 text-app-green hover:bg-app-cream rounded-xl transition-colors"
+              >
+                <User className="w-5 h-5" />
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="p-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
             </div>
+          ) : (
+            <Link
+              to="/login"
+              className="px-5 py-2 text-sm font-medium bg-app-green text-white rounded-xl hover:bg-app-green-light transition-colors"
+            >
+              Sign In
+            </Link>
+          )}
+        </div>
+
+        {/* Mobile Menu Button */}
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="md:hidden p-2 text-app-green rounded-xl hover:bg-app-cream"
+        >
+          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* Mobile Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white border-b border-app-border px-4 pt-2 pb-6 space-y-3">
+          <Link
+            to="/"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block py-2 text-sm font-medium text-app-green"
+          >
+            Home
+          </Link>
+          <Link
+            to="/products"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block py-2 text-sm font-medium text-app-green"
+          >
+            Products
+          </Link>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block py-2 text-sm font-semibold text-emerald-600"
+            >
+              Admin Dashboard
+            </Link>
+          )}
+
+          <div className="pt-4 border-t border-app-border flex items-center justify-between">
+            <Link
+              to="/cart"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 text-sm font-medium text-app-green"
+            >
+              <ShoppingBag className="w-5 h-5" /> Cart ({cartCount})
+            </Link>
+            {isAuthenticated ? (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-sm font-medium text-red-600"
+              >
+                <LogOut className="w-5 h-5" /> Logout
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-4 py-2 text-sm font-medium bg-app-green text-white rounded-xl"
+              >
+                Sign In
+              </Link>
+            )}
           </div>
         </div>
-      </div>
-    </nav>
+      )}
+    </header>
   );
 };
 
