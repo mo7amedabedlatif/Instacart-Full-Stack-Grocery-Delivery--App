@@ -1,218 +1,284 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CreditCard, ShieldCheck, CheckCircle2, Loader2 } from "lucide-react";
-import api from "@/api/axios";
+import {
+  ArrowLeft,
+  CheckIcon,
+  ChevronRightIcon,
+  CreditCardIcon,
+  MapPinIcon,
+} from "lucide-react";
+import toast from "react-hot-toast";
 
-interface CartItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image: string;
-}
+import { useCart } from "../context/CartContext";
+import type { Address } from "../types";
+import CheckoutAddress from "../components/Checkout/CheckoutAddress";
+import CheckoutPayment from "../components/Checkout/CheckoutPayment";
+import CheckoutReview from "../components/Checkout/CheckoutReview";
+import api from "../config/api";
+import { useAuth } from "../context/AuthContext";
 
-interface CheckoutProps {
-  cartItems?: CartItem[];
-  totalAmount?: number;
-  onSuccess?: () => void;
-}
-
-const Checkout = ({ cartItems = [], totalAmount = 0, onSuccess }: CheckoutProps) => {
+const Checkout = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "cod">("card");
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
+  const currency = import.meta.env.VITE_CURRENCY_SYMBOL || "₹";
+
+  const { items, cartTotal, clearCart } = useCart();
+  const { user, loading } = useAuth();
+
+  const [step, setStep] = useState("address");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const [address, setAddress] = useState<Address>({
+    id: "",
+    label: "Home",
     address: "",
     city: "",
-    zipCode: "",
+    state: "",
+    zip: "",
+    isDefault: false,
+    lat: 0,
+    lng: 0,
   });
 
-  const shippingFee = 5.0;
-  const finalTotal = totalAmount + shippingFee;
+  const [paymentMethod, setPaymentMethod] = useState("card");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  // ✅ User validation effect
+  useEffect(() => {
+    if (!loading && !user) {
+      toast.error("Please login to checkout");
+      navigate("/login", { replace: true });
+    }
+  }, [loading, user, navigate]);
+
+  // ✅ Redirect if cart is empty
+  useEffect(() => {
+    if (items.length === 0 && !checkoutLoading) {
+      toast.error("Your cart is empty");
+      navigate("/products");
+    }
+  }, [items, navigate, checkoutLoading]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-app-green"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  const deliveryFee = cartTotal > 20 ? 0 : 1.99;
+  const tax = cartTotal * 0.08;
+  const total = cartTotal + deliveryFee + tax;
+
+  const steps: { key: string; label: string; icon: typeof MapPinIcon }[] = [
+    { key: "address", label: "Address", icon: MapPinIcon },
+    { key: "payment", label: "Payment", icon: CreditCardIcon },
+    { key: "review", label: "Review", icon: CheckIcon },
+  ];
+
+  const handleNextStep = async () => {
+    if (step === "address") {
+      if (!address.address || !address.city || !address.zip) {
+        toast.error("Please fill in all address fields");
+        return;
+      }
+      setStep("payment");
+    } else if (step === "payment") {
+      setStep("review");
+    }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const handlePrevStep = () => {
+    const currentIndex = steps.findIndex((s) => s.key === step);
+    if (currentIndex > 0) {
+      setStep(steps[currentIndex - 1].key);
+    }
+  };
 
-    if (!formData.fullName || !formData.address || !formData.city) {
-      setError("Please fill in all required shipping fields.");
+  const handlePlaceOrder = async () => {
+    if (!user) {
+      toast.error("User not authenticated");
       return;
     }
 
-    setLoading(true);
-
+    setCheckoutLoading(true);
     try {
-      await api.post("/orders", {
-        items: cartItems,
-        shippingAddress: formData,
+      const { data } = await api.post("/orders", {
+        items: items.map((item) => ({
+          product: item.product.id,
+          quantity: item.quantity,
+        })),
+        shippingAddress: address,
         paymentMethod,
-        totalPrice: finalTotal,
       });
 
-      if (onSuccess) {
-        onSuccess();
-      } else {
-        navigate("/orders");
-      }
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to place order. Please try again.");
+      toast.success("Order placed successfully!");
+      clearCart();
+      navigate(`/orders/${data.order.id}`);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to place order");
     } finally {
-      setLoading(false);
+      setCheckoutLoading(false);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-sm text-app-text-light hover:text-app-green mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Cart
-      </button>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-6 sm:p-8 rounded-3xl border border-app-border shadow-sm">
-          <h2 className="text-xl font-bold text-app-green mb-6">Checkout & Shipping</h2>
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-app-green mb-1">Full Name *</label>
-              <input
-                type="text"
-                name="fullName"
-                value={formData.fullName}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
-                placeholder="John Doe"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-app-green mb-1">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
-                  placeholder="john@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-app-green mb-1">City *</label>
-                <input
-                  type="text"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
-                  placeholder="Gaza"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-app-green mb-1">Address *</label>
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-app-green outline-none text-sm"
-                placeholder="Street name, building number"
-                required
-              />
-            </div>
-
-            <div className="pt-4 border-t border-app-border">
-              <label className="block text-sm font-medium text-app-green mb-3">Payment Method</label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("card")}
-                  className={`p-4 rounded-2xl border text-center text-sm font-medium transition-colors ${
-                    paymentMethod === "card"
-                      ? "border-app-green bg-app-cream text-app-green"
-                      : "border-app-border hover:bg-gray-50 text-app-text-light"
-                  }`}
-                >
-                  <CreditCard className="w-5 h-5 mx-auto mb-1" />
-                  Credit Card
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("cod")}
-                  className={`p-4 rounded-2xl border text-center text-sm font-medium transition-colors ${
-                    paymentMethod === "cod"
-                      ? "border-app-green bg-app-cream text-app-green"
-                      : "border-app-border hover:bg-gray-50 text-app-text-light"
-                  }`}
-                >
-                  <ShieldCheck className="w-5 h-5 mx-auto mb-1" />
-                  Cash on Delivery
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-6 py-3 bg-app-green text-white font-medium rounded-xl hover:bg-app-green-light transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Processing Order...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" /> Place Order (${finalTotal.toFixed(2)})
-                </>
-              )}
-            </button>
-          </form>
+    <div className="min-h-screen bg-app-cream py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        {/* Header */}
+        <div className="mb-8">
+          <button
+            onClick={() => navigate("/products")}
+            className="flex items-center gap-2 text-sm text-app-text-light hover:text-app-green transition-colors mb-6"
+          >
+            <ArrowLeft className="size-4" /> Back to Shopping
+          </button>
+          <h1 className="text-3xl font-semibold text-app-green">Checkout</h1>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-app-border shadow-sm h-fit">
-          <h3 className="text-lg font-bold text-app-green mb-4">Order Summary</h3>
-          <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-            {cartItems.map((item) => (
-              <div key={item.id} className="flex justify-between items-center text-sm">
-                <span className="text-app-text-light">
-                  {item.name} x {item.quantity}
-                </span>
-                <span className="font-medium">${(item.price * item.quantity).toFixed(2)}</span>
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2">
+            {/* Steps */}
+            <div className="bg-white rounded-2xl p-6 mb-6">
+              <div className="flex items-center justify-between">
+                {steps.map((s, index) => (
+                  <div key={s.key} className="flex items-center flex-1">
+                    <button
+                      onClick={() => {
+                        const currentIndex = steps.findIndex(
+                          (st) => st.key === step
+                        );
+                        if (index < currentIndex) {
+                          setStep(s.key);
+                        }
+                      }}
+                      className={`flex items-center gap-3 pb-4 transition-colors ${
+                        step === s.key
+                          ? "border-b-2 border-app-green text-app-green font-semibold"
+                          : "text-app-text-light"
+                      }`}
+                    >
+                      <s.icon className="size-5" />
+                      <span className="hidden sm:inline">{s.label}</span>
+                    </button>
+                    {index < steps.length - 1 && (
+                      <div
+                        className={`flex-1 h-0.5 mx-2 transition-colors ${
+                          steps.findIndex((st) => st.key === step) > index
+                            ? "bg-app-green"
+                            : "bg-app-border"
+                        }`}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* Step Content */}
+            <div className="bg-white rounded-2xl p-6">
+              {step === "address" && (
+                <CheckoutAddress address={address} setAddress={setAddress} />
+              )}
+              {step === "payment" && (
+                <CheckoutPayment
+                  paymentMethod={paymentMethod}
+                  setPaymentMethod={setPaymentMethod}
+                />
+              )}
+              {step === "review" && (
+                <CheckoutReview items={items} address={address} />
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={handlePrevStep}
+                  disabled={step === "address"}
+                  className="px-6 py-3 border border-app-border rounded-xl font-semibold text-app-text-light hover:bg-app-cream disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+
+                {step !== "review" ? (
+                  <button
+                    onClick={handleNextStep}
+                    className="flex-1 px-6 py-3 bg-app-green text-white rounded-xl font-semibold hover:bg-app-green-dark transition-colors"
+                  >
+                    Next <ChevronRightIcon className="size-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handlePlaceOrder}
+                    disabled={checkoutLoading}
+                    className="flex-1 px-6 py-3 bg-app-orange text-white rounded-xl font-semibold hover:bg-app-orange-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {checkoutLoading ? "Processing..." : "Place Order"}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="border-t border-app-border pt-3 space-y-2 text-sm">
-            <div className="flex justify-between text-app-text-light">
-              <span>Subtotal</span>
-              <span>${totalAmount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-app-text-light">
-              <span>Shipping</span>
-              <span>${shippingFee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-base font-bold text-app-green pt-2 border-t border-app-border">
-              <span>Total</span>
-              <span>${finalTotal.toFixed(2)}</span>
+          {/* Order Summary */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-2xl p-6 sticky top-24">
+              <h3 className="text-lg font-semibold text-app-green mb-4">
+                Order Summary
+              </h3>
+
+              <div className="space-y-4 mb-6 border-b border-app-border pb-4">
+                {items.map((item) => (
+                  <div key={item.product.id} className="flex justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{item.product.name}</p>
+                      <p className="text-xs text-app-text-light">
+                        x{item.quantity}
+                      </p>
+                    </div>
+                    <p className="font-semibold">
+                      {currency}
+                      {(item.product.price * item.quantity).toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2 mb-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-app-text-light">Subtotal</span>
+                  <span className="font-semibold">
+                    {currency}
+                    {cartTotal.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-app-text-light">Delivery Fee</span>
+                  <span className="font-semibold">
+                    {currency}
+                    {deliveryFee.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-app-text-light">Tax</span>
+                  <span className="font-semibold">
+                    {currency}
+                    {tax.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t border-app-border pt-4 flex justify-between">
+                <span className="font-semibold text-app-green">Total</span>
+                <span className="text-xl font-bold text-app-green">
+                  {currency}
+                  {total.toFixed(2)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
