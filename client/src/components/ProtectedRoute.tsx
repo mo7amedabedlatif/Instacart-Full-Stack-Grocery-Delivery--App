@@ -1,28 +1,18 @@
-import { ReactNode } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-interface ProtectedRouteProps {
-  children: ReactNode;
-  requireAdmin?: boolean;
-}
+const ProtectedRoute = () => {
+  const { user, loading } = useAuth();
 
-const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps) => {
-  const location = useLocation();
-
-  const token = localStorage.getItem("token");
-  const userRole = localStorage.getItem("role");
-
-  // Check Authentication
-  if (!token) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  if (loading) {
+    return <div>Loading...</div>;
   }
 
-  // Check Authorization for Admin
-  if (requireAdmin && userRole !== "admin") {
-    return <Navigate to="/" replace />;
+  if (!user) {
+    return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <Outlet />;
 };
 
 export default ProtectedRoute;
