@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import AppLayout from "./pages/AppLayout";
 import Home from "./pages/Home";
 import Products from "./pages/Products";
+import Product from "./pages/Product";
 import SearchResults from "./pages/SearchResults";
 import FlashDeals from "./pages/FlashDeals";
 import Checkout from "./pages/Checkout";
@@ -48,7 +49,7 @@ const App = () => {
         <Route path="/" element={<AppLayout />}>
           <Route index element={<Home />} />
           <Route path="products" element={<Products />} />
-          <Route path="products/:id" element={<Products />} />
+          <Route path="products/:id" element={<Product />} />
           <Route path="search" element={<SearchResults />} />
           <Route path="deals" element={<FlashDeals />} />
           <Route element={<ProtectedRoute />}>
