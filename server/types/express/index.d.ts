@@ -1,4 +1,4 @@
-import { User, DeliveryPartner } from "../../generated/prisma/client.ts";
+import { User, DeliveryPartner } from "@prisma/client";
 
 declare global {
     namespace Express {
