@@ -30,15 +30,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("auth_token");
-    const savedUser = localStorage.getItem("auth_user");
+    try {
+      const savedToken = localStorage.getItem("auth_token");
+      const savedUser = localStorage.getItem("auth_user");
 
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+      if (savedToken && savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setToken(savedToken);
+          setUser(parsedUser);
+        } catch (parseErr) {
+          console.warn("Failed to parse saved user data, clearing auth");
+          localStorage.removeItem("auth_token");
+          localStorage.removeItem("auth_user");
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load auth state:", err);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -84,7 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       const updated = { ...user, ...userData };
       setUser(updated);
-      localStorage.setItem("auth_user", JSON.stringify(updated));
+      try {
+        localStorage.setItem("auth_user", JSON.stringify(updated));
+      } catch (err) {
+        console.warn("Failed to save updated user to localStorage:", err);
+      }
     }
   };
 

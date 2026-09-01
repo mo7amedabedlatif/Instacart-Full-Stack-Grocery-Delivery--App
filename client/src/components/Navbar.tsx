@@ -11,24 +11,35 @@ const Navbar = ({ cartCount = 0 }: NavbarProps) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  const token = localStorage.getItem("token");
-  const userRole = localStorage.getItem("role");
-  const isAuthenticated = Boolean(token);
-  const isAdmin = userRole === "admin";
+  // Load auth state once on mount
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem("token");
+      const userRole = localStorage.getItem("role");
+      setIsAuthenticated(Boolean(token));
+      setIsAdmin(userRole === "admin");
+    } catch (err) {
+      console.warn("Failed to load auth state from localStorage");
+    }
+  }, []);
 
-  // Close mobile menu on scroll
+  // Close mobile menu on scroll (only attach once)
   useEffect(() => {
     const handleScroll = () => {
-      if (mobileMenuOpen && window.scrollY > 50) {
-        setMobileMenuOpen(false);
-      }
       setScrolled(window.scrollY > 10);
+      
+      // Close menu only if it's open and user scrolled
+      if (window.scrollY > 50) {
+        setMobileMenuOpen(prev => prev ? false : false);
+      }
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [mobileMenuOpen]);
+  }, []); // Empty dependency array - attach once only
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -36,10 +47,18 @@ const Navbar = ({ cartCount = 0 }: NavbarProps) => {
   }, [location.pathname]);
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("role");
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user");
+    } catch (err) {
+      console.warn("Failed to clear auth data:", err);
+    }
+    setIsAuthenticated(false);
+    setIsAdmin(false);
     setMobileMenuOpen(false);
-    navigate("/login");
+    navigate("/login", { replace: true });
   };
 
   return (

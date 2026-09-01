@@ -51,19 +51,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
     // Validate inputs
     if (!product || !product.id || quantity <= 0) return;
     
+    // Warn if quantity exceeds stock
+    if (quantity > product.stock) {
+      console.warn(`Requested quantity (${quantity}) exceeds available stock (${product.stock})`);
+    }
+    
     setItems((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
+      const maxQuantity = product.stock || 1;
+      
       if (existing) {
+        const newQuantity = Math.min(existing.quantity + quantity, maxQuantity);
         return prev.map((item) =>
           item.product.id === product.id
             ? { 
                 ...item, 
-                quantity: Math.max(1, Math.min(item.quantity + quantity, product.stock || 999))
+                quantity: newQuantity
               }
             : item,
         );
       }
-      return [...prev, { product, quantity: Math.min(quantity, product.stock || 999) }];
+      
+      return [...prev, { 
+        product, 
+        quantity: Math.min(quantity, maxQuantity) 
+      }];
     });
     setIsCartOpen(true);
   }, []);

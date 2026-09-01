@@ -39,28 +39,68 @@ const ProductPage = () => {
     setLocalQuantity(1);
     window.scrollTo(0, 0);
 
-    api
-      .get(`/products/${id}`)
-      .then(({ data }) => {
-        if (!data?.product) {
+    // Create abort controller for cleanup on unmount
+    const abortController = new AbortController();
+    let isMounted = true;
+
+    const loadProduct = async () => {
+      try {
+        const { data: productData } = await api.get(`/products/${id}`, {
+          signal: abortController.signal
+        });
+        
+        if (!isMounted) return;
+        
+        if (!productData?.product) {
           setError("Product not found");
-          return Promise.reject("Product not found");
+          toast.error("Product not found");
+          return;
         }
-        setProduct(data.product);
-        return api.get(`/products?category=${data.product.category}`);
-      })
-      .then(({ data }) => {
-        if (data?.products && Array.isArray(data.products)) {
-          setRelatedProducts(data.products.filter((p: Product) => p.id !== id));
+        
+        setProduct(productData.product);
+        
+        // Fetch related products
+        try {
+          const { data: relatedData } = await api.get(
+            `/products?category=${productData.product.category}`,
+            { signal: abortController.signal }
+          );
+          
+          if (isMounted && relatedData?.products && Array.isArray(relatedData.products)) {
+            setRelatedProducts(
+              relatedData.products.filter((p: Product) => p.id !== id)
+            );
+          }
+        } catch (err) {
+          // Related products fetch failure is not critical
+          console.warn("Failed to load related products:", err);
         }
-      })
-      .catch((err) => {
-        const errorMsg = err?.response?.data?.message || "Failed to load product";
-        setError(errorMsg);
-        toast.error(errorMsg);
-      })
-      .finally(() => setLoading(false));
-  }, [id, navigate]);
+      } catch (err: any) {
+        // Ignore abort errors
+        if (err.name === 'AbortError') {
+          return;
+        }
+        
+        if (isMounted) {
+          const errorMsg = err?.response?.data?.message || "Failed to load product";
+          setError(errorMsg);
+          toast.error(errorMsg);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadProduct();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, [id]);
 
   if (loading) return <Loading />;
   
@@ -106,8 +146,18 @@ const ProductPage = () => {
   };
 
   const handleAddToCart = () => {
-    if (product.stock === 0) {
-      toast.error("Out of stock");
+    // Validate stock
+    if (!product || product.stock <= 0) {
+      toast.error("This product is out of stock");
+      return;
+    }
+    
+    // Check if requested quantity exceeds available stock
+    if (localQuantity > product.stock) {
+      toast.error(
+        `Only ${product.stock} item${product.stock > 1 ? 's' : ''} available in stock`
+      );
+      setLocalQuantity(Math.min(localQuantity, product.stock));
       return;
     }
     
@@ -116,7 +166,7 @@ const ProductPage = () => {
       if (!inCart) {
         addToCart(product, localQuantity);
       }
-      toast.success(`${localQuantity}x ${product.name} added to cart! 🛒`);
+      toast.success(`✅ ${localQuantity}x ${product.name} added to cart!`);
       setLocalQuantity(1);
     } catch (err) {
       toast.error("Failed to add to cart");

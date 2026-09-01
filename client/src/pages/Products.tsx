@@ -29,6 +29,10 @@ const Products = () => {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
+    
+    // Create abort controller to cancel requests on unmount
+    const abortController = new AbortController();
+    
     try {
       const params = new URLSearchParams();
       if (category) params.set("category", category);
@@ -39,8 +43,11 @@ const Products = () => {
       params.set("page", String(page));
       params.set("limit", "12");
 
-      const { data } = await api.get(`/products?${params.toString()}`);
+      const { data } = await api.get(`/products?${params.toString()}`, {
+        signal: abortController.signal
+      });
       
+      // Only update state if this is still the latest request
       if (data?.products && Array.isArray(data.products)) {
         setProducts(data.products);
         setTotalPages(data.pages || 1);
@@ -49,6 +56,11 @@ const Products = () => {
         setError("Failed to load products. Please try again.");
       }
     } catch (error: any) {
+      // Ignore abort errors (component unmounted)
+      if (error.name === 'AbortError') {
+        return;
+      }
+      
       const errorMsg = error?.response?.data?.message || error?.message || "Error loading products";
       setError(errorMsg);
       toast.error(errorMsg);
@@ -56,6 +68,11 @@ const Products = () => {
     } finally {
       setLoading(false);
     }
+    
+    // Cleanup function to cancel request if component unmounts
+    return () => {
+      abortController.abort();
+    };
   }, [category, organic, sort, page, minPrice, maxPrice]);
 
   const updateFilter = useCallback((key: string, value: string) => {

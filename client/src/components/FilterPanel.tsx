@@ -36,10 +36,18 @@ const FilterPanel = ({
 
   // Update local state when props change
   useEffect(() => {
+    // Cancel any pending debounce
+    if (minPriceTimerRef.current) {
+      clearTimeout(minPriceTimerRef.current);
+    }
     setLocalMinPrice(minPrice);
   }, [minPrice]);
 
   useEffect(() => {
+    // Cancel any pending debounce
+    if (maxPriceTimerRef.current) {
+      clearTimeout(maxPriceTimerRef.current);
+    }
     setLocalMaxPrice(maxPrice);
   }, [maxPrice]);
 

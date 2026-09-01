@@ -34,9 +34,16 @@ const CartSidebar = () => {
   // Prevent body scroll when cart is open
   useEffect(() => {
     if (isCartOpen) {
+      // Store current scroll position
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
       document.body.style.overflow = "hidden";
+      document.body.style.paddingRight = "8px"; // Prevent layout shift from scrollbar
+      
       return () => {
-        document.body.style.overflow = "unset";
+        document.body.style.overflow = "";
+        document.body.style.paddingRight = "";
+        // Restore scroll position
+        window.scrollTo(0, scrollTop);
       };
     }
   }, [isCartOpen]);
