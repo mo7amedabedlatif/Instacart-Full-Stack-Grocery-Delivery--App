@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ChevronDown, Home, SlidersHorizontal, XIcon } from "lucide-react";
+import { ChevronDown, Home, SlidersHorizontal, XIcon, AlertCircle } from "lucide-react";
 
 import type { Product } from "../types";
 import { categoriesData } from "../assets/assets";
@@ -16,6 +16,8 @@ const Products = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
 
   const category = searchParams.get("category") || "";
   const organic = searchParams.get("organic") || "";
@@ -24,8 +26,9 @@ const Products = () => {
   const minPrice = searchParams.get("minPrice") || "";
   const maxPrice = searchParams.get("maxPrice") || "";
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (category) params.set("category", category);
@@ -37,16 +40,25 @@ const Products = () => {
       params.set("limit", "12");
 
       const { data } = await api.get(`/products?${params.toString()}`);
-      setProducts(data.products);
-      setTotalPages(data.pages);
+      
+      if (data?.products && Array.isArray(data.products)) {
+        setProducts(data.products);
+        setTotalPages(data.pages || 1);
+      } else {
+        setProducts([]);
+        setError("Failed to load products. Please try again.");
+      }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message);
+      const errorMsg = error?.response?.data?.message || error?.message || "Error loading products";
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setProducts([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [category, organic, sort, page, minPrice, maxPrice]);
 
-  const updateFilter = (key: string, value: string) => {
+  const updateFilter = useCallback((key: string, value: string) => {
     const newParams = new URLSearchParams(searchParams);
     if (value) {
       newParams.set(key, value);
@@ -57,16 +69,30 @@ const Products = () => {
       newParams.delete("page");
     }
     setSearchParams(newParams);
-  };
+  }, [searchParams, setSearchParams]);
 
-  const clearFilters = () => setSearchParams({});
+  const clearFilters = useCallback(() => setSearchParams({}), [setSearchParams]);
 
   const activeCategory = categoriesData.find((c) => c.slug === category);
   const hasFilters = category || organic || minPrice || maxPrice;
 
   useEffect(() => {
-    fetchProducts();
-  }, [category, organic, sort, page, minPrice, maxPrice]);
+    // Clear previous debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Debounce the fetch call (100ms)
+    debounceTimerRef.current = setTimeout(() => {
+      fetchProducts();
+    }, 100);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [category, organic, sort, page, minPrice, maxPrice, fetchProducts]);
 
   return (
     <div className="min-h-screen bg-app-cream">
@@ -85,7 +111,7 @@ const Products = () => {
         <div className="flex gap-8 xl:gap-10">
           {/* Sidebar - Desktop */}
           <aside className="hidden lg:block w-64 shrink-0">
-            <div className="bg-white rounded-2xl p-4 sticky top-24">
+            <div className="bg-white rounded-2xl p-4 sticky top-20 max-h-[calc(100vh-100px)] overflow-y-auto shadow-sm">
               <FilterPanel
                 categories={categoriesData}
                 category={category}
@@ -95,6 +121,7 @@ const Products = () => {
                 updateFilter={updateFilter}
                 clearFilters={clearFilters}
                 hasFilters={hasFilters}
+                disabled={loading}
               />
             </div>
           </aside>
@@ -140,29 +167,54 @@ const Products = () => {
             </div>
 
             {/* Product Grid */}
+            {error && !loading && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6 flex gap-4">
+                <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-red-900 mb-1">Error Loading Products</h3>
+                  <p className="text-sm text-red-800 mb-3">{error}</p>
+                  <button
+                    onClick={() => fetchProducts()}
+                    className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <Loading />
             ) : products.length === 0 ? (
               <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center size-16 bg-app-cream rounded-full mb-4">
+                  <p className="text-3xl">🔍</p>
+                </div>
                 <p className="text-lg font-semibold text-app-green mb-2">
                   No products found
                 </p>
-                <p className="text-sm text-app-text-light mb-4">
-                  Try adjusting your filters or search terms
+                <p className="text-sm text-app-text-light mb-6">
+                  {hasFilters 
+                    ? "Try adjusting your filters or search terms" 
+                    : "No products available at the moment"}
                 </p>
-                <button
-                  onClick={clearFilters}
-                  className="px-5 py-2 text-sm font-medium bg-app-green text-white rounded-xl hover:bg-app-green-light transition-colors"
-                >
-                  Clear Filters
-                </button>
+                {hasFilters && (
+                  <button
+                    onClick={clearFilters}
+                    className="px-5 py-2 text-sm font-medium bg-app-green text-white rounded-xl hover:bg-app-green-light transition-colors"
+                  >
+                    Clear Filters
+                  </button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 xl:gap-8">
                 {products.map(
                   (product) =>
                     product.stock > 0 && (
-                      <ProductCard key={product.id} product={product} />
+                      <div key={product.id} className="animate-fade-in">
+                        <ProductCard product={product} />
+                      </div>
                     ),
                 )}
               </div>

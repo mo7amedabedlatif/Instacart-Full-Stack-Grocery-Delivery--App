@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import {
   ArrowRightIcon,
   MinusIcon,
@@ -23,6 +24,22 @@ const CartSidebar = () => {
   } = useCart();
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Close cart on route change
+  useEffect(() => {
+    setIsCartOpen(false);
+  }, [location.pathname, setIsCartOpen]);
+
+  // Prevent body scroll when cart is open
+  useEffect(() => {
+    if (isCartOpen) {
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "unset";
+      };
+    }
+  }, [isCartOpen]);
 
   if (!isCartOpen) return null;
 
@@ -31,14 +48,17 @@ const CartSidebar = () => {
 
   return (
     <>
-      {/* Overlay */}
+      {/* Overlay - Higher z-index to prevent conflicts */}
       <div
         onClick={() => setIsCartOpen(false)}
-        className="fixed inset-0 bg-black/40 z-50 transition-opacity"
+        className="fixed inset-0 bg-black/40 z-40 transition-opacity duration-200 animate-fade-in"
       />
 
-      {/* Sidebar */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl flex flex-col animate-slide-in-right">
+      {/* Sidebar - Fixed positioning with proper z-index */}
+      <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl flex flex-col animate-slide-in-right"
+        style={{
+          animation: "slideInRight 0.3s ease-out forwards"
+        }}
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-app-border">
           <div className="flex items-center gap-2">

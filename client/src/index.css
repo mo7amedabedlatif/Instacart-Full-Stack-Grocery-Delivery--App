@@ -102,6 +102,18 @@ input:focus {
   }
 }
 
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes pulse-soft {
   0%,
   100% {
@@ -110,6 +122,15 @@ input:focus {
 
   50% {
     opacity: 0.7;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
   }
 }
 
@@ -125,6 +146,23 @@ input:focus {
   animation: slideInUp 0.4s ease-out forwards;
 }
 
+.animate-slide-in-down {
+  animation: slideInDown 0.3s ease-out forwards;
+}
+
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Loading shimmer effect */
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
 }

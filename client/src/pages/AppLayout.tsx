@@ -5,12 +5,15 @@ import Banner from "../components/Banner";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import CartSidebar from "../components/CartSidebar";
+import { useCart } from "../context/CartContext";
 
 const AppLayout = () => {
+  const { cartCount } = useCart();
+
   return (
     <>
       <Banner />
-      <Navbar />
+      <Navbar cartCount={cartCount} />
 
       <main className="min-h-screen">
         <Outlet />

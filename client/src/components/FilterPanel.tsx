@@ -1,4 +1,5 @@
 import { SlidersHorizontal, RotateCcw } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 
 export interface CategoryItem {
   name: string;
@@ -28,6 +29,48 @@ const FilterPanel = ({
   hasFilters,
   disabled = false,
 }: FilterPanelProps) => {
+  const [localMinPrice, setLocalMinPrice] = useState(minPrice);
+  const [localMaxPrice, setLocalMaxPrice] = useState(maxPrice);
+  const minPriceTimerRef = useRef<NodeJS.Timeout>();
+  const maxPriceTimerRef = useRef<NodeJS.Timeout>();
+
+  // Update local state when props change
+  useEffect(() => {
+    setLocalMinPrice(minPrice);
+  }, [minPrice]);
+
+  useEffect(() => {
+    setLocalMaxPrice(maxPrice);
+  }, [maxPrice]);
+
+  const handleMinPriceChange = (value: string) => {
+    setLocalMinPrice(value);
+    if (minPriceTimerRef.current) {
+      clearTimeout(minPriceTimerRef.current);
+    }
+    minPriceTimerRef.current = setTimeout(() => {
+      updateFilter("minPrice", value);
+    }, 500);
+  };
+
+  const handleMaxPriceChange = (value: string) => {
+    setLocalMaxPrice(value);
+    if (maxPriceTimerRef.current) {
+      clearTimeout(maxPriceTimerRef.current);
+    }
+    maxPriceTimerRef.current = setTimeout(() => {
+      updateFilter("maxPrice", value);
+    }, 500);
+  };
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (minPriceTimerRef.current) clearTimeout(minPriceTimerRef.current);
+      if (maxPriceTimerRef.current) clearTimeout(maxPriceTimerRef.current);
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between pb-4 border-b border-app-border">
@@ -84,19 +127,19 @@ const FilterPanel = ({
           <input
             type="number"
             placeholder="Min"
-            value={minPrice}
-            onChange={(e) => updateFilter("minPrice", e.target.value)}
+            value={localMinPrice}
+            onChange={(e) => handleMinPriceChange(e.target.value)}
             disabled={disabled}
-            className="w-full px-3 py-2 rounded-xl border border-app-border text-sm focus:border-app-green outline-none"
+            className="w-full px-3 py-2 rounded-xl border border-app-border text-sm focus:border-app-green outline-none transition-colors disabled:opacity-50"
           />
           <span className="text-app-text-light text-xs">-</span>
           <input
             type="number"
             placeholder="Max"
-            value={maxPrice}
-            onChange={(e) => updateFilter("maxPrice", e.target.value)}
+            value={localMaxPrice}
+            onChange={(e) => handleMaxPriceChange(e.target.value)}
             disabled={disabled}
-            className="w-full px-3 py-2 rounded-xl border border-app-border text-sm focus:border-app-green outline-none"
+            className="w-full px-3 py-2 rounded-xl border border-app-border text-sm focus:border-app-green outline-none transition-colors disabled:opacity-50"
           />
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -9,6 +10,7 @@ import {
   PlusIcon,
   ShoppingCartIcon,
   StarIcon,
+  AlertCircle,
 } from "lucide-react";
 
 import { useCart } from "../context/CartContext";
@@ -27,28 +29,62 @@ const ProductPage = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [localQuantity, setLocalQuantity] = useState(1);
+  const [addingToCart, setAddingToCart] = useState(false);
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     setLocalQuantity(1);
     window.scrollTo(0, 0);
 
     api
       .get(`/products/${id}`)
       .then(({ data }) => {
+        if (!data?.product) {
+          setError("Product not found");
+          return Promise.reject("Product not found");
+        }
         setProduct(data.product);
         return api.get(`/products?category=${data.product.category}`);
       })
       .then(({ data }) => {
-        setRelatedProducts(data.products.filter((p: Product) => p.id !== id));
+        if (data?.products && Array.isArray(data.products)) {
+          setRelatedProducts(data.products.filter((p: Product) => p.id !== id));
+        }
       })
-      .catch(() => navigate("/products"))
+      .catch((err) => {
+        const errorMsg = err?.response?.data?.message || "Failed to load product";
+        setError(errorMsg);
+        toast.error(errorMsg);
+      })
       .finally(() => setLoading(false));
   }, [id, navigate]);
 
   if (loading) return <Loading />;
-  if (!product) return null;
+  
+  if (error || !product) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <AlertCircle className="size-16 text-app-error mx-auto mb-4" />
+          <h1 className="text-2xl font-semibold text-app-green mb-2">
+            {error || "Product Not Found"}
+          </h1>
+          <p className="text-app-text-light mb-6">
+            The product you're looking for doesn't exist or has been removed.
+          </p>
+          <button
+            onClick={() => navigate("/products")}
+            className="px-6 py-3 bg-app-green text-white rounded-xl hover:bg-app-green-light transition-colors font-semibold"
+          >
+            Back to Products
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const cartItem = items.find((item) => item.product.id === product.id);
   const inCart = !!cartItem;
@@ -67,6 +103,26 @@ const ProductPage = () => {
   const handlePlus = () => {
     if (inCart) updateQuantity(product.id, cartItem.quantity + 1);
     else setLocalQuantity(localQuantity + 1);
+  };
+
+  const handleAddToCart = () => {
+    if (product.stock === 0) {
+      toast.error("Out of stock");
+      return;
+    }
+    
+    setAddingToCart(true);
+    try {
+      if (!inCart) {
+        addToCart(product, localQuantity);
+      }
+      toast.success(`${localQuantity}x ${product.name} added to cart! 🛒`);
+      setLocalQuantity(1);
+    } catch (err) {
+      toast.error("Failed to add to cart");
+    } finally {
+      setAddingToCart(false);
+    }
   };
 
   const categoryLabel = product.category.replace(/-/g, " ");
@@ -200,10 +256,11 @@ const ProductPage = () => {
               {/* Quantity + Add to Cart */}
               <div className="flex items-center gap-3">
                 {/* Quantity */}
-                <div className="flex items-center border border-app-border rounded-xl overflow-hidden">
+                <div className="flex items-center border border-app-border rounded-xl overflow-hidden bg-white">
                   <button
                     onClick={handleMinus}
-                    className="p-3 hover:bg-app-cream transition-colors"
+                    disabled={addingToCart}
+                    className="p-3 hover:bg-app-cream transition-colors disabled:opacity-50"
                   >
                     <MinusIcon className="w-4 h-4" />
                   </button>
@@ -214,21 +271,29 @@ const ProductPage = () => {
 
                   <button
                     onClick={handlePlus}
-                    className="p-3 hover:bg-app-cream transition-colors"
+                    disabled={addingToCart}
+                    className="p-3 hover:bg-app-cream transition-colors disabled:opacity-50"
                   >
                     <PlusIcon className="w-4 h-4" />
                   </button>
                 </div>
+
                 {/* Add to Cart */}
                 <button
-                  onClick={() => {
-                    if (!inCart) addToCart(product, localQuantity);
-                  }}
-                  disabled={product.stock === 0}
-                  className={`flex-1 py-3 font-semibold rounded-xl transition-colors flex-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] ${inCart ? "bg-app-cream text-app-green border border-app-green" : "bg-app-orange text-white hover:bg-app-orange-dark"}`}
+                  onClick={handleAddToCart}
+                  disabled={product.stock === 0 || addingToCart}
+                  className={`flex-1 py-3 font-semibold rounded-xl transition-all flex-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] ${
+                    inCart 
+                      ? "bg-app-cream text-app-green border-2 border-app-green hover:bg-app-cream-dark" 
+                      : "bg-app-orange text-white hover:bg-app-orange-dark"
+                  } ${addingToCart ? "opacity-75" : ""}`}
                 >
-                  <ShoppingCartIcon className="w-4 h-4" />
-                  {inCart ? "Added to Cart" : "Add to Cart"}
+                  <ShoppingCartIcon className={`w-4 h-4 ${addingToCart ? "animate-pulse-soft" : ""}`} />
+                  {addingToCart 
+                    ? "Adding..." 
+                    : inCart 
+                    ? "Added to Cart ✓" 
+                    : "Add to Cart"}
                 </button>
               </div>
             </div>
@@ -240,27 +305,35 @@ const ProductPage = () => {
 
         {/* Related Products */}
         {relatedProducts.length > 0 && (
-          <section className="mt-12 mb-44">
-            <div className="flex items-center justify-between mb-6">
+          <section className="mt-16 mb-44 animate-fade-in">
+            <div className="flex items-center justify-between mb-8">
               <div>
-                <h2 className="text-2xl font-semibold text-app-green">
+                <h2 className="text-2xl md:text-3xl font-semibold text-app-green">
                   Related Products
                 </h2>
-                <p className="text-sm text-app-text-light mt-1">
+                <p className="text-sm text-app-text-light mt-2">
                   More from {categoryLabel}
                 </p>
               </div>
               <Link
-                className="text-sm font-semibold text-app-orange hover:text-app-orange-dark flex items-center gap-1 transition-colors"
+                className="text-sm font-semibold text-app-orange hover:text-app-orange-dark flex items-center gap-1 transition-colors whitespace-nowrap ml-4"
                 to={`/products?category=${product.category}`}
               >
                 View All <ArrowRightIcon className="size-4" />
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 xl:gap-8">
-              {relatedProducts.slice(0, 5).map((rp) => (
-                <ProductCard key={rp.id} product={rp} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 xl:gap-6">
+              {relatedProducts.slice(0, 5).map((rp, idx) => (
+                <div 
+                  key={rp.id} 
+                  className="animate-fade-in"
+                  style={{
+                    animationDelay: `${idx * 50}ms`
+                  }}
+                >
+                  <ProductCard product={rp} />
+                </div>
               ))}
             </div>
           </section>

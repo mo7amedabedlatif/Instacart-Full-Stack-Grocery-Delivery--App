@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ShoppingBag, User, LogOut, Shield, Menu, X } from "lucide-react";
 
 interface NavbarProps {
@@ -8,21 +8,42 @@ interface NavbarProps {
 
 const Navbar = ({ cartCount = 0 }: NavbarProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   const token = localStorage.getItem("token");
   const userRole = localStorage.getItem("role");
   const isAuthenticated = Boolean(token);
   const isAdmin = userRole === "admin";
 
+  // Close mobile menu on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (mobileMenuOpen && window.scrollY > 50) {
+        setMobileMenuOpen(false);
+      }
+      setScrolled(window.scrollY > 10);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [mobileMenuOpen]);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
+    setMobileMenuOpen(false);
     navigate("/login");
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-app-border">
+    <header className={`sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-app-border transition-all duration-300 ${scrolled ? "shadow-md" : ""}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="text-xl font-bold text-app-green tracking-tight">
@@ -96,59 +117,66 @@ const Navbar = ({ cartCount = 0 }: NavbarProps) => {
         </button>
       </div>
 
-      {/* Mobile Drawer */}
+      {/* Mobile Drawer with Smooth Animation */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-app-border px-4 pt-2 pb-6 space-y-3">
-          <Link
-            to="/"
+        <>
+          {/* Overlay backdrop */}
+          <div
+            className="md:hidden fixed inset-0 bg-black/30 z-40 animate-fade-in"
             onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-sm font-medium text-app-green"
-          >
-            Home
-          </Link>
-          <Link
-            to="/products"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-sm font-medium text-app-green"
-          >
-            Products
-          </Link>
-          {isAdmin && (
+          />
+          <nav className="md:hidden fixed top-16 left-0 right-0 bg-white border-b border-app-border px-4 pt-2 pb-6 space-y-3 z-40 shadow-lg animate-slide-in-down">
             <Link
-              to="/admin"
+              to="/"
               onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-sm font-semibold text-emerald-600"
+              className="block py-2 text-sm font-medium text-app-green hover:text-app-green-light transition-colors"
             >
-              Admin Dashboard
+              🏠 Home
             </Link>
-          )}
-
-          <div className="pt-4 border-t border-app-border flex items-center justify-between">
             <Link
-              to="/cart"
+              to="/products"
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 text-sm font-medium text-app-green"
+              className="block py-2 text-sm font-medium text-app-green hover:text-app-green-light transition-colors"
             >
-              <ShoppingBag className="w-5 h-5" /> Cart ({cartCount})
+              🛒 Products
             </Link>
-            {isAuthenticated ? (
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 text-sm font-medium text-red-600"
-              >
-                <LogOut className="w-5 h-5" /> Logout
-              </button>
-            ) : (
+            {isAdmin && (
               <Link
-                to="/login"
+                to="/admin"
                 onClick={() => setMobileMenuOpen(false)}
-                className="px-4 py-2 text-sm font-medium bg-app-green text-white rounded-xl"
+                className="block py-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
               >
-                Sign In
+                🛡️ Admin Dashboard
               </Link>
             )}
-          </div>
-        </div>
+
+            <div className="pt-4 border-t border-app-border flex items-center justify-between">
+              <Link
+                to="/cart"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 text-sm font-medium text-app-green hover:text-app-green-light transition-colors"
+              >
+                <ShoppingBag className="w-5 h-5" /> Cart ({cartCount})
+              </Link>
+              {isAuthenticated ? (
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+                >
+                  <LogOut className="w-5 h-5" /> Logout
+                </button>
+              ) : (
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-4 py-2 text-sm font-medium bg-app-green text-white rounded-xl hover:bg-app-green-light transition-colors"
+                >
+                  Sign In
+                </Link>
+              )}
+            </div>
+          </nav>
+        </>
       )}
     </header>
   );
