@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Zap } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Zap, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 import type { Product } from "../types";
@@ -10,16 +10,41 @@ import api from "../config/api";
 const FlashDeals = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDeals = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data } = await api.get("/products/flash-deals", { signal });
+      
+      if (data?.products && Array.isArray(data.products)) {
+        setProducts(data.products);
+      } else {
+        setProducts([]);
+      }
+    } catch (error: any) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') return;
+      
+      const errorMsg = error?.response?.data?.message || error?.message || "Failed to load deals";
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    api
-      .get("/products/flash-deals")
-      .then((res) => setProducts(res.data.products))
-      .catch((error: any) =>
-        toast.error(error.response.data.message || error?.message),
-      )
-      .finally(() => setLoading(false));
-  }, []);
+    const abortController = new AbortController();
+    fetchDeals(abortController.signal);
+    
+    return () => {
+      abortController.abort();
+    };
+  }, [fetchDeals]);
 
   return (
     <div className="min-h-screen bg-app-cream">
@@ -39,6 +64,26 @@ const FlashDeals = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6 flex gap-4">
+            <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-900 mb-1">Failed to Load Deals</h3>
+              <p className="text-sm text-red-800 mb-3">{error}</p>
+              <button
+                onClick={() => {
+                  const abortController = new AbortController();
+                  fetchDeals(abortController.signal);
+                }}
+                className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+        
         {loading ? (
           <Loading />
         ) : products.length === 0 ? (

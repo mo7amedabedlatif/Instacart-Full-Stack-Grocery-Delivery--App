@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   PackageIcon,
   UsersIcon,
   ShoppingBagIcon,
   AlertTriangleIcon,
+  AlertCircle,
 } from "lucide-react";
 
 import Loading from "../../components/Loading";
@@ -24,14 +25,39 @@ export default function AdminDashboard() {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchStats = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { data } = await api.get("/admin/stats", { signal });
+      
+      if (data) {
+        setStats(data);
+      } else {
+        setError("Failed to load stats");
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to load dashboard";
+      setError(errorMsg);
+      console.error("Dashboard error:", errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    api
-      .get("/admin/stats")
-      .then((res) => setStats(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    const abortController = new AbortController();
+    fetchStats(abortController.signal);
+    
+    return () => {
+      abortController.abort();
+    };
+  }, [fetchStats]);
 
   const cards = stats
     ? [
@@ -55,6 +81,27 @@ export default function AdminDashboard() {
     : [];
 
   if (loading) return <Loading />;
+  
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex gap-4">
+        <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <h3 className="font-semibold text-red-900 mb-1">Failed to Load Dashboard</h3>
+          <p className="text-sm text-red-800 mb-3">{error}</p>
+          <button
+            onClick={() => {
+              const abortController = new AbortController();
+              fetchStats(abortController.signal);
+            }}
+            className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

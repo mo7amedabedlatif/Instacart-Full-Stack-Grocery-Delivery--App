@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CalendarIcon, ChevronRightIcon, PackageIcon } from "lucide-react";
+import { CalendarIcon, ChevronRightIcon, PackageIcon, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCart } from "../context/CartContext";
@@ -14,6 +14,7 @@ const MyOrders = () => {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("all");
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -21,30 +22,55 @@ const MyOrders = () => {
 
   const { clearCart } = useCart();
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (signal?: AbortSignal) => {
     setLoading(true);
+    setError(null);
     try {
       const params = activeTab !== "all" ? `?status=${activeTab}` : "";
-      const { data } = await api.get(`/orders${params}`);
-      setOrders(data.orders);
+      const { data } = await api.get(`/orders${params}`, { signal });
+      if (data?.orders) {
+        setOrders(data.orders);
+      } else {
+        setOrders([]);
+      }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || error?.message);
+      // Ignore abort errors
+      if (error.name === 'AbortError') return;
+      
+      const errorMsg = error?.response?.data?.message || error?.message || "Failed to load orders";
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    const abortController = new AbortController();
+    
+    // Handle clearCart case
     if (searchParams.get("clearCart")) {
       clearCart();
       setSearchParams({});
-      setTimeout(() => {
-        fetchOrders();
-      }, 2000);
-    } else {
-      fetchOrders();
+      // Wait a moment before fetching new orders
+      const timer = setTimeout(() => {
+        fetchOrders(abortController.signal);
+      }, 500); // Reduced from 2000 to 500ms
+      
+      return () => {
+        clearTimeout(timer);
+        abortController.abort();
+      };
     }
-  }, [activeTab]);
+    
+    // Otherwise fetch directly
+    fetchOrders(abortController.signal);
+    
+    return () => {
+      abortController.abort();
+    };
+  }, [activeTab, searchParams, clearCart, setSearchParams]);
 
   return (
     <div className="min-h-screen bg-app-cream mb-20">
@@ -67,6 +93,26 @@ const MyOrders = () => {
         </div>
 
         {/* Orders List */}
+        {error && !loading && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6 flex gap-4">
+            <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-900 mb-1">Error Loading Orders</h3>
+              <p className="text-sm text-red-800 mb-3">{error}</p>
+              <button
+                onClick={() => {
+                  setError(null);
+                  const abortController = new AbortController();
+                  fetchOrders(abortController.signal);
+                }}
+                className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+        
         {loading ? (
           <Loading />
         ) : orders.length === 0 ? (
@@ -80,7 +126,7 @@ const MyOrders = () => {
             </p>
             <Link
               to="/products"
-              className="inline-flex px-4 py-2 bg-app-green text-white text-sm rounded-lg"
+              className="inline-flex px-4 py-2 bg-app-green text-white text-sm rounded-lg hover:bg-app-green-light transition-colors"
             >
               Start Shopping
             </Link>

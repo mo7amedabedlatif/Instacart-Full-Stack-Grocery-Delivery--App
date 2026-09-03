@@ -9,6 +9,7 @@ import {
   LockIcon,
   MailIcon,
   UserIcon,
+  AlertCircle as AlertIcon,
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
@@ -21,12 +22,47 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
 
   const { login, register } = useAuth();
 
-  const handleSubmit = async (e: React.SubmitEvent) => {
+  const validateForm = () => {
+    // Reset error
+    setError("");
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address");
+      return false;
+    }
+
+    // Password validation
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return false;
+    }
+
+    // Name validation (only for signup)
+    if (!isLoginState && name.trim().length < 2) {
+      setError("Name must be at least 2 characters long");
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
+
     setLoading(true);
+    setError("");
+    
     try {
       if (isLoginState) {
         await login(email, password);
@@ -34,7 +70,8 @@ const Login = () => {
         await register(name, email, password);
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || error?.message);
+      const errorMsg = error?.response?.data?.message || error?.message || "An error occurred";
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -92,6 +129,13 @@ const Login = () => {
 
           {/* Login / Register Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex gap-2">
+                <AlertIcon className="size-5 text-red-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
             {!isLoginState && (
               <label className="text-sm flex flex-col gap-1">
                 Name

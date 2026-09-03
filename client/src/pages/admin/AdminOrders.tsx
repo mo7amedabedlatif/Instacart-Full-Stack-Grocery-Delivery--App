@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { TruckIcon } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { TruckIcon, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 import type { DeliveryPartner } from "../../types";
@@ -12,44 +12,82 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [partners, setPartners] = useState<DeliveryPartner[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [assignModal, setAssignModal] = useState<string | null>(null);
   const [selectedPartner, setSelectedPartner] = useState("");
+  const [updating, setUpdating] = useState(false);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async (signal?: AbortSignal) => {
     try {
-      const { data } = await api.get("/orders/all");
-      setOrders(data.orders);
+      const { data } = await api.get("/orders/all", { signal });
+      if (data?.orders && Array.isArray(data.orders)) {
+        setOrders(data.orders);
+        setError(null);
+      } else {
+        setOrders([]);
+        setError("Failed to load orders");
+      }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to load orders");
+      if (error.name === 'AbortError') return;
+      
+      const errorMsg = error?.response?.data?.message || "Failed to load orders";
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchPartners = async () => {
-    try {
-      const { data } = await api.get("/admin/delivery-partners");
-      setPartners(data.partners.filter((p: DeliveryPartner) => p.isActive));
-    } catch {}
-  };
-
-  useEffect(() => {
-    fetchOrders();
-    fetchPartners();
   }, []);
 
+  const fetchPartners = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const { data } = await api.get("/admin/delivery-partners", { signal });
+      if (data?.partners && Array.isArray(data.partners)) {
+        setPartners(data.partners.filter((p: DeliveryPartner) => p.isActive));
+      }
+    } catch (error: any) {
+      // Silent fail for partners - not critical
+      console.warn("Failed to load delivery partners:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const abortController = new AbortController();
+    
+    fetchOrders(abortController.signal);
+    fetchPartners(abortController.signal);
+
+    return () => {
+      abortController.abort();
+    };
+  }, [fetchOrders, fetchPartners]);
+
   const handleStatusChange = async (id: string, newStatus: string) => {
+    setUpdating(true);
     try {
       await api.put(`/orders/${id}/status`, { status: newStatus });
       toast.success("Order status updated");
-      fetchOrders();
+      
+      // Optimistically update state
+      setOrders(prev => 
+        prev.map(order => 
+          order.id === id ? { ...order, status: newStatus } : order
+        )
+      );
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to update status");
+      toast.error(error?.response?.data?.message || "Failed to update status");
+      // Refetch to get fresh data
+      const abortController = new AbortController();
+      fetchOrders(abortController.signal);
+    } finally {
+      setUpdating(false);
     }
   };
 
   const handleAssign = async () => {
     if (!assignModal || !selectedPartner) return;
+    
+    setUpdating(true);
     try {
       await api.put(`/admin/orders/${assignModal}/assign`, {
         partnerId: selectedPartner,
@@ -57,9 +95,25 @@ export default function AdminOrders() {
       toast.success("Delivery partner assigned!");
       setAssignModal(null);
       setSelectedPartner("");
-      fetchOrders();
+      
+      // Optimistically update state
+      setOrders(prev =>
+        prev.map(order =>
+          order.id === assignModal
+            ? {
+                ...order,
+                deliveryPartner: partners.find(p => p.id === selectedPartner)
+              }
+            : order
+        )
+      );
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed");
+      toast.error(error?.response?.data?.message || "Failed to assign");
+      // Refetch to ensure consistency
+      const abortController = new AbortController();
+      fetchOrders(abortController.signal);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -90,6 +144,25 @@ export default function AdminOrders() {
         <div className="px-6 py-5 border-b border-app-border">
           <h2 className="text-xl font-semibold text-zinc-900">Orders</h2>
         </div>
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-red-50 border-b border-red-200 p-4 flex gap-3">
+            <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+            <button
+              onClick={() => {
+                const abortController = new AbortController();
+                fetchOrders(abortController.signal);
+              }}
+              className="text-sm font-medium text-red-600 hover:text-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-app-cream/50 text-zinc-500 uppercase text-xs font-semibold">

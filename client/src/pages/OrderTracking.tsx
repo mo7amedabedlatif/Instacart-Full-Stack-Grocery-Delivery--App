@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeftIcon, MapPinIcon, PhoneIcon } from "lucide-react";
+import { ArrowLeftIcon, MapPinIcon, PhoneIcon, AlertCircle } from "lucide-react";
 
 import type { Order } from "../types";
 import Loading from "../components/Loading";
@@ -15,50 +15,121 @@ const OrderTracking = () => {
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [liveLocation, setLiveLocation] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Fetch initial order
   useEffect(() => {
-    api
-      .get(`/orders/${id}`)
-      .then((res) => setOrder(res.data.order))
-      .catch(() => navigate("/orders"))
-      .finally(() => setLoading(false));
+    const abortController = new AbortController();
+    let isMounted = true;
+
+    const fetchOrder = async () => {
+      try {
+        const { data } = await api.get(`/orders/${id}`, {
+          signal: abortController.signal
+        });
+        
+        if (isMounted && data?.order) {
+          setOrder(data.order);
+          setError(null);
+        } else if (isMounted) {
+          setError("Order not found");
+          setTimeout(() => navigate("/orders"), 2000);
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+        if (isMounted) {
+          setError("Failed to load order");
+          setTimeout(() => navigate("/orders"), 2000);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchOrder();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [id, navigate]);
 
-  // live location every 10 seconds
+  // Live location polling
   useEffect(() => {
-    if (!order || ["Delivered", "Cancelled", "Placed"].includes(order.status))
+    if (!order || ["Delivered", "Cancelled", "Placed"].includes(order.status)) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
+    }
 
     const fetchLocation = async () => {
       try {
         const { data } = await api.get(`/orders/${id}/location`);
-        if (
-          data.liveLocation?.lat &&
-          data.liveLocation?.lng &&
-          data.liveLocation.updatedAt
-        ) {
+        
+        if (data?.liveLocation?.lat && data?.liveLocation?.lng) {
           setLiveLocation({
             lat: data.liveLocation.lat,
             lng: data.liveLocation.lng,
           });
         }
-        // Also update order status if it changed
-        if (data.status && data.status !== order.status) {
-          setOrder((prev) => (prev ? { ...prev, status: data.status } : prev));
+        
+        // Update order status if changed
+        if (data?.status && data.status !== order?.status) {
+          setOrder((prev) => 
+            prev ? { ...prev, status: data.status } : prev
+          );
         }
-      } catch {}
+      } catch (error) {
+        // Silent fail for location updates
+        console.warn("Failed to fetch live location:", error);
+      }
     };
+
+    // Initial fetch
     fetchLocation();
-    const interval = setInterval(fetchLocation, 10000);
-    return () => clearInterval(interval);
+    
+    // Set interval - only if not in terminal state
+    intervalRef.current = setInterval(fetchLocation, 10000);
+
+    // Cleanup
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [id, order?.status]);
 
   if (loading) return <Loading />;
-  if (!order) null;
+  
+  if (error || !order) {
+    return (
+      <div className="min-h-screen bg-app-cream flex items-center justify-center">
+        <div className="text-center max-w-md px-4">
+          <AlertCircle className="size-16 text-red-600 mx-auto mb-4" />
+          <h1 className="text-2xl font-semibold text-app-green mb-2">
+            {error || "Order Not Found"}
+          </h1>
+          <p className="text-app-text-light mb-6">
+            {error || "The order you're looking for doesn't exist or has been deleted."}
+          </p>
+          <button
+            onClick={() => navigate("/orders")}
+            className="px-6 py-3 bg-app-green text-white rounded-xl hover:bg-app-green-light transition-colors font-semibold"
+          >
+            Back to Orders
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen mb-20 bg-app-cream">

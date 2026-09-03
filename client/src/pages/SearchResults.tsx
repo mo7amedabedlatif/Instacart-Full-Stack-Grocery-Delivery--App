@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Home, Search } from "lucide-react";
+import { Home, Search, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 import type { Product } from "../types";
@@ -11,20 +11,72 @@ import api from "../config/api";
 const SearchResults = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
+
+  const fetchResults = useCallback(async (signal?: AbortSignal) => {
+    if (!query) {
+      setProducts([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { data } = await api.get(`/products?search=${encodeURIComponent(query)}`, {
+        signal
+      });
+
+      if (data?.products && Array.isArray(data.products)) {
+        setProducts(data.products);
+      } else {
+        setProducts([]);
+      }
+    } catch (err: any) {
+      // Ignore abort errors
+      if (err.name === 'AbortError') return;
+
+      const errorMsg = err?.response?.data?.message || err?.message || "Failed to search";
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [query]);
 
   useEffect(() => {
-    if (!query) return;
-    setLoading(true);
-    api
-      .get(`/products?search=${encodeURIComponent(query)}`)
-      .then((res) => setProducts(res.data.products))
-      .catch((error: any) => {
-        toast.error(error.response?.data?.message || error.message);
-      })
-      .finally(() => setLoading(false));
-  }, [query]);
+    if (!query) {
+      setProducts([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    // Debounce the search (300ms)
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      fetchResults(abortController.signal);
+    }, 300);
+
+    // Cleanup
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      abortController.abort();
+    };
+  }, [query, fetchResults]);
 
   return (
     <div className="min-h-screen bg-app-cream">
@@ -50,6 +102,16 @@ const SearchResults = () => {
         </div>
 
         {/* Results */}
+        {error && !loading && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6 flex gap-4">
+            <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-900 mb-1">Search Error</h3>
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          </div>
+        )}
+        
         {loading ? (
           <Loading />
         ) : products.length === 0 ? (
@@ -64,7 +126,7 @@ const SearchResults = () => {
             </p>
             <Link
               to="/products"
-              className="inline-flex px-5 py-2.5 bg-app-green text-white text-sm font-medium rounded-lg"
+              className="inline-flex px-5 py-2.5 bg-app-green text-white text-sm font-medium rounded-lg hover:bg-app-green-light transition-colors"
             >
               Browse All Products
             </Link>

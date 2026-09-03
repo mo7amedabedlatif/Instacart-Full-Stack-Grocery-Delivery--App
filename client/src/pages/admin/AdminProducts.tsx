@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { PlusIcon, EditIcon, XIcon } from "lucide-react";
+import { PlusIcon, EditIcon, XIcon, AlertCircle } from "lucide-react";
 
 import type { Product } from "../../types";
 import Loading from "../../components/Loading";
@@ -12,21 +12,41 @@ export default function AdminProducts() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
     try {
-      const { data } = await api.get("/products");
-      setProducts(data.products);
+      const { data } = await api.get("/products", { signal });
+      
+      if (data?.products && Array.isArray(data.products)) {
+        setProducts(data.products);
+      } else {
+        setProducts([]);
+        setError("Failed to load products");
+      }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || error?.message);
+      // Ignore abort errors
+      if (error.name === 'AbortError') return;
+      
+      const errorMsg = error?.response?.data?.message || error?.message || "Failed to load products";
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setProducts([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const abortController = new AbortController();
+    fetchProducts(abortController.signal);
+    
+    return () => {
+      abortController.abort();
+    };
+  }, [fetchProducts]);
 
   const handleMarkOutOfStock = async (id: string, name: string) => {
     if (
@@ -35,12 +55,24 @@ export default function AdminProducts() {
       )
     )
       return;
+    
     try {
       await api.delete(`/products/${id}`);
       toast.success("Product marked as out of stock");
-      fetchProducts();
+      
+      // Optimistically update state
+      setProducts(prev => prev.filter(p => p.id !== id));
+      
+      // Refetch to ensure consistency
+      setTimeout(() => {
+        const abortController = new AbortController();
+        fetchProducts(abortController.signal);
+      }, 500);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to update product");
+      toast.error(error?.response?.data?.message || "Failed to update product");
+      // Refetch on error to get fresh data
+      const abortController = new AbortController();
+      fetchProducts(abortController.signal);
     }
   };
 
@@ -58,6 +90,26 @@ export default function AdminProducts() {
             <PlusIcon className="size-4" /> Add Product
           </Link>
         </div>
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-red-50 border-b border-red-200 p-4 flex gap-3">
+            <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+            <button
+              onClick={() => {
+                const abortController = new AbortController();
+                fetchProducts(abortController.signal);
+              }}
+              className="text-sm font-medium text-red-600 hover:text-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-app-cream/50 text-zinc-500 uppercase text-xs font-semibold">

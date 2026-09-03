@@ -99,13 +99,34 @@ const Checkout = () => {
   };
 
   const handlePlaceOrder = async () => {
+    // Validation checks
     if (!user) {
       toast.error("User not authenticated");
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    if (items.length === 0) {
+      toast.error("Your cart is empty");
+      navigate("/products");
+      return;
+    }
+
+    if (!address.address || !address.city || !address.zip) {
+      toast.error("Please provide a valid delivery address");
+      setStep("address");
+      return;
+    }
+
+    if (!paymentMethod) {
+      toast.error("Please select a payment method");
+      setStep("payment");
       return;
     }
 
     setCheckoutLoading(true);
     try {
+      // Create order
       const { data } = await api.post("/orders", {
         items: items.map((item) => ({
           product: item.product.id,
@@ -115,11 +136,30 @@ const Checkout = () => {
         paymentMethod,
       });
 
-      toast.success("Order placed successfully!");
+      if (!data?.order?.id) {
+        throw new Error("Invalid order response from server");
+      }
+
+      toast.success("Order placed successfully! 🎉");
+      
+      // Clear cart and navigate
       clearCart();
-      navigate(`/orders/${data.order.id}`);
+      navigate(`/orders?clearCart=true`, { replace: true });
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to place order");
+      console.error("Order placement error:", error);
+      
+      const errorMsg = error?.response?.data?.message || 
+                       error?.message || 
+                       "Failed to place order. Please try again.";
+      
+      toast.error(errorMsg);
+      
+      // Refocus on the step that needs attention
+      if (errorMsg.includes("address") || errorMsg.includes("shipping")) {
+        setStep("address");
+      } else if (errorMsg.includes("payment")) {
+        setStep("payment");
+      }
     } finally {
       setCheckoutLoading(false);
     }

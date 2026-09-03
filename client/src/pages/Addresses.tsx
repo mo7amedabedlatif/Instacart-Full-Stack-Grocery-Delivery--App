@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { MapPinIcon, PlusIcon } from "lucide-react";
+import { MapPinIcon, PlusIcon, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 import Loading from "../components/Loading";
@@ -14,6 +14,7 @@ const Addresses = () => {
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -113,17 +114,41 @@ const Addresses = () => {
   };
 
   useEffect(() => {
-    api
-      .get("/addresses")
-      .then(({ data }) => {
-        setAddresses(data.addresses);
-      })
-      .catch((error: any) => {
-        toast.error(error.response?.data?.message || error?.message);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    const abortController = new AbortController();
+    let isMounted = true;
+
+    const fetchAddresses = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data } = await api.get("/addresses", {
+          signal: abortController.signal
+        });
+        
+        if (isMounted && data?.addresses) {
+          setAddresses(data.addresses);
+        } else if (isMounted) {
+          setAddresses([]);
+        }
+      } catch (error: any) {
+        if (error.name === 'AbortError') return;
+        
+        if (isMounted) {
+          const errorMsg = error?.response?.data?.message || error?.message || "Failed to load addresses";
+          setError(errorMsg);
+          toast.error(errorMsg);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchAddresses();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   return (
@@ -157,6 +182,26 @@ const Addresses = () => {
         )}
 
         {/* Addresses List */}
+        {error && !loading && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6 flex gap-4">
+            <AlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-900 mb-1">Error Loading Addresses</h3>
+              <p className="text-sm text-red-800 mb-3">{error}</p>
+              <button
+                onClick={() => {
+                  setError(null);
+                  const abortController = new AbortController();
+                  // Re-fetch logic here
+                }}
+                className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+        
         {loading ? (
           <Loading />
         ) : addresses.length === 0 ? (
