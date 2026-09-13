@@ -1,213 +1,228 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, X, Clock, TrendingUp } from "lucide-react";
+import { Search, Clock, TrendingUp, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
+interface SearchSuggestion {
+  text: string;
+  type: "recent" | "trending" | "category";
+  icon: React.ReactNode;
+}
 
 const SearchBar = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const searchRef = useRef<HTMLDivElement>(null);
 
-  // Trending searches (you can replace this with API data)
-  const trendingSearches = ["طماطم طازة", "موز عضوي", "تفاح أحمر", "جزر طازة"];
+  const trendingSearches = [
+    "عضوي",
+    "خضروات طازة",
+    "منتجات ألبان",
+    "فواكه",
+    "خبز",
+    "حليب",
+  ];
 
-  // Load search history from localStorage
+  const categories = [
+    "الخضروات",
+    "الفواكه",
+    "الألبان",
+    "المشروبات",
+    "الحبوب",
+    "اللحوم",
+  ];
+
+  // Load recent searches
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("app_search_history");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setSearchHistory(Array.isArray(parsed) ? parsed.slice(0, 10) : []);
+      const saved = localStorage.getItem("app_search_history_v1");
+      if (saved) {
+        setRecentSearches(JSON.parse(saved));
       }
-    } catch (error) {
-      console.warn("Failed to load search history:", error);
+    } catch {
+      setRecentSearches([]);
     }
   }, []);
 
   // Handle outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
       }
     };
 
-    if (showDropdown) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [showDropdown]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  // Generate suggestions based on query
-  useEffect(() => {
-    if (!query.trim()) {
-      setSuggestions([]);
+  const handleInputChange = (value: string) => {
+    setQuery(value);
+
+    if (!value.trim()) {
+      setSuggestions([
+        ...recentSearches.slice(0, 3).map((text) => ({
+          text,
+          type: "recent" as const,
+          icon: <Clock className="size-4 text-app-text-light" />,
+        })),
+        ...trendingSearches.slice(0, 2).map((text) => ({
+          text,
+          type: "trending" as const,
+          icon: <TrendingUp className="size-4 text-app-orange" />,
+        })),
+      ]);
+      setShowSuggestions(true);
       return;
     }
 
-    // Filter trending searches that match the query
-    const filtered = trendingSearches.filter((search) =>
-      search.includes(query.toLowerCase())
+    // Filter suggestions
+    const filteredSuggestions: SearchSuggestion[] = [];
+
+    // Recent searches
+    const matchingRecent = recentSearches
+      .filter((s) => s.toLowerCase().includes(value.toLowerCase()))
+      .slice(0, 2);
+    filteredSuggestions.push(
+      ...matchingRecent.map((text) => ({
+        text,
+        type: "recent" as const,
+        icon: <Clock className="size-4 text-app-text-light" />,
+      }))
     );
 
-    // Add matching history items
-    const historyMatches = searchHistory.filter((item) =>
-      item.toLowerCase().includes(query.toLowerCase())
+    // Categories
+    const matchingCategories = categories
+      .filter((s) => s.toLowerCase().includes(value.toLowerCase()))
+      .slice(0, 2);
+    filteredSuggestions.push(
+      ...matchingCategories.map((text) => ({
+        text,
+        type: "category" as const,
+        icon: <Search className="size-4 text-app-green" />,
+      }))
     );
 
-    setSuggestions([...filtered, ...historyMatches].slice(0, 5));
-  }, [query, searchHistory]);
+    // Trending
+    const matchingTrending = trendingSearches
+      .filter((s) => s.toLowerCase().includes(value.toLowerCase()))
+      .slice(0, 1);
+    filteredSuggestions.push(
+      ...matchingTrending.map((text) => ({
+        text,
+        type: "trending" as const,
+        icon: <TrendingUp className="size-4 text-app-orange" />,
+      }))
+    );
+
+    setSuggestions(filteredSuggestions);
+    setShowSuggestions(true);
+  };
 
   const handleSearch = (searchQuery: string) => {
-    if (!searchQuery.trim()) return;
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery) return;
 
-    // Add to history
-    const updated = [searchQuery, ...searchHistory.filter((item) => item !== searchQuery)].slice(0, 10);
-    setSearchHistory(updated);
-    localStorage.setItem("app_search_history", JSON.stringify(updated));
+    // Save to recent searches
+    const updated = [
+      trimmedQuery,
+      ...recentSearches.filter((s) => s !== trimmedQuery),
+    ].slice(0, 10);
+    setRecentSearches(updated);
+    localStorage.setItem("app_search_history_v1", JSON.stringify(updated));
 
-    // Navigate to search results
-    navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
-    setShowDropdown(false);
+    // Navigate
+    navigate(`/search?q=${encodeURIComponent(trimmedQuery)}`);
     setQuery("");
+    setShowSuggestions(false);
   };
 
-  const clearHistory = () => {
-    setSearchHistory([]);
-    localStorage.removeItem("app_search_history");
+  const handleSuggestionClick = (text: string) => {
+    setQuery(text);
+    handleSearch(text);
   };
 
-  const removeHistoryItem = (item: string) => {
-    const updated = searchHistory.filter((h) => h !== item);
-    setSearchHistory(updated);
-    localStorage.setItem("app_search_history", JSON.stringify(updated));
+  const handleClearHistory = () => {
+    setRecentSearches([]);
+    localStorage.removeItem("app_search_history_v1");
+    setSuggestions(
+      trendingSearches.slice(0, 5).map((text) => ({
+        text,
+        type: "trending" as const,
+        icon: <TrendingUp className="size-4 text-app-orange" />,
+      }))
+    );
   };
 
   return (
-    <div className="relative flex-1 max-w-md" ref={dropdownRef}>
+    <div ref={searchRef} className="relative w-full max-w-md">
       {/* Search Input */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-app-text-light" />
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setShowDropdown(true)}
-          onKeyDown={(e) => {
+          onChange={(e) => handleInputChange(e.target.value)}
+          onFocus={() => setShowSuggestions(true)}
+          onKeyPress={(e) => {
             if (e.key === "Enter") {
               handleSearch(query);
             }
           }}
-          placeholder="ابحث عن المنتجات..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-app-border rounded-xl text-sm focus:border-app-green outline-none"
+          placeholder="ابحث عن منتجات..."
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-app-border rounded-xl focus:border-app-green outline-none transition-colors text-sm"
         />
-
-        {/* Clear Button */}
         {query && (
           <button
-            onClick={() => setQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-app-cream rounded transition-colors"
+            onClick={() => {
+              setQuery("");
+              setSuggestions([]);
+            }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-app-cream rounded-full transition-colors"
           >
             <X className="size-4 text-app-text-light" />
           </button>
         )}
       </div>
 
-      {/* Dropdown */}
-      {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-app-border rounded-xl shadow-lg z-40">
-          {/* Suggestions */}
-          {suggestions.length > 0 && (
-            <div>
-              <div className="px-4 py-2 border-b border-app-border">
-                <p className="text-xs font-semibold text-app-text-light">اقتراحات</p>
-              </div>
-              {suggestions.map((suggestion) => (
+      {/* Suggestions Dropdown */}
+      {showSuggestions && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-app-border rounded-xl shadow-lg z-50 overflow-hidden">
+          {suggestions.length > 0 ? (
+            <div className="py-2">
+              {suggestions.map((suggestion, index) => (
                 <button
-                  key={suggestion}
-                  onClick={() => handleSearch(suggestion)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-app-cream flex items-center gap-2 text-sm transition-colors"
+                  key={index}
+                  onClick={() => handleSuggestionClick(suggestion.text)}
+                  className="w-full px-4 py-2 flex items-center gap-3 text-left hover:bg-app-cream transition-colors text-sm"
                 >
-                  <Search className="size-4 text-app-text-light" />
-                  <span>{suggestion}</span>
+                  {suggestion.icon}
+                  <span className="text-app-text">{suggestion.text}</span>
+                  {suggestion.type === "recent" && (
+                    <span className="text-xs text-app-text-light ml-auto">
+                      البحث الأخير
+                    </span>
+                  )}
                 </button>
               ))}
-            </div>
-          )}
 
-          {/* Search History */}
-          {searchHistory.length > 0 && !query && (
-            <div>
-              <div className="px-4 py-2 border-b border-app-border flex items-center justify-between">
-                <p className="text-xs font-semibold text-app-text-light flex items-center gap-1">
-                  <Clock className="size-3" />
-                  البحث الأخير
-                </p>
+              {/* Clear History Button */}
+              {recentSearches.length > 0 && (
                 <button
-                  onClick={clearHistory}
-                  className="text-xs text-app-green hover:text-app-green-light transition-colors"
+                  onClick={handleClearHistory}
+                  className="w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-red-50 transition-colors border-t border-app-border mt-2 pt-2"
                 >
-                  مسح الكل
+                  🗑️ مسح سجل البحث
                 </button>
-              </div>
-              {searchHistory.slice(0, 5).map((item) => (
-                <div
-                  key={item}
-                  className="px-4 py-2.5 hover:bg-app-cream flex items-center justify-between group"
-                >
-                  <button
-                    onClick={() => handleSearch(item)}
-                    className="flex-1 text-left text-sm text-app-text"
-                  >
-                    {item}
-                  </button>
-                  <button
-                    onClick={() => removeHistoryItem(item)}
-                    className="p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="size-3 text-app-text-light" />
-                  </button>
-                </div>
-              ))}
+              )}
             </div>
-          )}
-
-          {/* Trending */}
-          {!query && searchHistory.length === 0 && (
-            <div>
-              <div className="px-4 py-2 border-b border-app-border">
-                <p className="text-xs font-semibold text-app-text-light flex items-center gap-1">
-                  <TrendingUp className="size-3" />
-                  الاتجاهات الحالية
-                </p>
-              </div>
-              {trendingSearches.map((trend) => (
-                <button
-                  key={trend}
-                  onClick={() => handleSearch(trend)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-app-cream flex items-center gap-2 text-sm transition-colors"
-                >
-                  <TrendingUp className="size-4 text-app-orange" />
-                  <span>{trend}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* No Results */}
-          {query && suggestions.length === 0 && (
-            <div className="px-4 py-8 text-center">
-              <p className="text-xs text-app-text-light">
-                لا توجد نتائج لـ "<strong>{query}</strong>"
+          ) : (
+            <div className="px-4 py-6 text-center">
+              <p className="text-sm text-app-text-light">
+                {query ? "لا توجد نتائج" : "ابدأ بالبحث..."}
               </p>
-              <button
-                onClick={() => handleSearch(query)}
-                className="mt-3 text-xs text-app-green hover:text-app-green-light font-medium"
-              >
-                ابحث عنها على أي حال
-              </button>
             </div>
           )}
         </div>

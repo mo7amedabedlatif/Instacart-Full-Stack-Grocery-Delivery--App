@@ -1,93 +1,142 @@
-import { useState, useEffect } from "react";
-import { Star, ShoppingBag } from "lucide-react";
-import api from "../config/api";
+import { useEffect, useState } from "react";
+import { Zap, TrendingUp } from "lucide-react";
+import toast from "react-hot-toast";
+
 import type { Product } from "../types";
 import ProductCard from "./ProductCard";
+import Loading from "./Loading";
+import api from "../config/api";
 
 interface ProductRecommendationsProps {
-  currentProductId: string;
-  category?: string;
+  currentProductId?: string;
+  title?: string;
+  showTitle?: boolean;
 }
 
 const ProductRecommendations = ({
   currentProductId,
-  category,
+  title = "منتجات قد تنال إعجابك",
+  showTitle = true,
 }: ProductRecommendationsProps) => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [recommendations, setRecommendations] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchRecommendations = async () => {
       try {
         const abortController = new AbortController();
-        
-        // Fetch products from same category
-        let url = "/products";
-        if (category) {
-          url += `?category=${encodeURIComponent(category)}`;
-        }
 
-        const { data } = await api.get(url, {
+        // Fetch products
+        const { data } = await api.get("/products", {
           signal: abortController.signal,
         });
 
-        if (data?.products && Array.isArray(data.products)) {
-          // Filter out current product and get top 4
-          const recommended = data.products
-            .filter((p: Product) => p.id !== currentProductId)
-            .slice(0, 4);
-
-          setProducts(recommended);
+        if (!data?.products) {
+          setRecommendations([]);
+          return;
         }
 
-        return () => abortController.abort();
-      } catch (error) {
-        console.warn("Failed to load recommendations:", error);
+        let filtered = data.products;
+
+        // Remove current product
+        if (currentProductId) {
+          filtered = filtered.filter((p: Product) => p.id !== currentProductId);
+        }
+
+        // Get personalized recommendations
+        // 1. Try to find trending products (high rating)
+        const trendingProducts = filtered
+          .filter((p: Product) => p.rating >= 4.5)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3);
+
+        // 2. Add discounted products
+        const discountedProducts = filtered
+          .filter((p: Product) => p.originalPrice && p.originalPrice > p.price)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 2);
+
+        // 3. Add in-stock products
+        const inStockProducts = filtered
+          .filter((p: Product) => p.stock > 5)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3);
+
+        // Combine and deduplicate
+        const combined = [
+          ...trendingProducts,
+          ...discountedProducts,
+          ...inStockProducts,
+        ];
+        const unique = Array.from(
+          new Map(combined.map((item) => [item.id, item])).values()
+        ).slice(0, 6);
+
+        setRecommendations(unique);
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error("Failed to fetch recommendations:", error);
+          setRecommendations([]);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchRecommendations();
-  }, [currentProductId, category]);
+  }, [currentProductId]);
 
-  if (loading || products.length === 0) {
-    return null;
-  }
+  if (loading) return <Loading />;
+
+  if (recommendations.length === 0) return null;
 
   return (
-    <div className="space-y-6">
+    <section className="py-8">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Star className="size-5 text-app-orange fill-app-orange" />
-          <h2 className="text-xl font-bold text-app-green">يُنصح أيضاً</h2>
+      {showTitle && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="size-8 bg-app-orange/10 rounded-full flex items-center justify-center">
+              <Zap className="size-5 text-app-orange" />
+            </div>
+            <h2 className="text-2xl font-bold text-app-green">{title}</h2>
+          </div>
+          <p className="text-sm text-app-text-light">
+            اختيارنا الأفضل بناءً على تقييمات المستخدمين والعروض الحالية
+          </p>
         </div>
-        <p className="text-sm text-app-text-light">
-          منتجات أخرى قد تعجبك من نفس الفئة
-        </p>
-      </div>
+      )}
 
       {/* Products Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {products.map((product) => (
-          <div key={product.id} className="group">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-4">
+        {recommendations.map((product) => (
+          <div key={product.id} className="relative">
             <ProductCard product={product} />
-            
-            {/* Add to Cart Button */}
-            <button className="w-full mt-2 py-2 bg-app-green/10 text-app-green text-sm font-medium rounded-lg hover:bg-app-green hover:text-white transition-colors flex items-center justify-center gap-1">
-              <ShoppingBag className="size-3" />
-              أضف
-            </button>
+
+            {/* Badge */}
+            {product.rating >= 4.5 && (
+              <div className="absolute top-2 left-2 bg-app-orange text-white text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1">
+                <TrendingUp className="size-3" />
+                الأفضل
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Scroller Info for Mobile */}
-      <div className="sm:hidden text-xs text-app-text-light text-center">
-        👈 مرر بسهولة لترى المزيد
+      {/* Tips Section */}
+      <div className="mt-8 bg-app-green/5 border border-app-green/20 rounded-2xl p-6">
+        <p className="text-sm text-app-text-light">
+          💡 <span className="font-semibold">نصيحة:</span> المنتجات الموصى بها
+          تم اختيارها بناءً على:
+        </p>
+        <ul className="text-xs text-app-text-light mt-3 space-y-1">
+          <li>✓ تقييمات عالية من المستخدمين</li>
+          <li>✓ عروض حالية وخصومات</li>
+          <li>✓ توفر المخزون والتوصيل السريع</li>
+        </ul>
       </div>
-    </div>
+    </section>
   );
 };
 

@@ -8,11 +8,11 @@ interface WishlistItem {
 
 interface WishlistContextType {
   wishlist: WishlistItem[];
-  addToWishlist: (productId: string) => void;
-  removeFromWishlist: (productId: string) => void;
-  isInWishlist: (productId: string) => boolean;
+  isFavorited: (productId: string) => boolean;
+  addToWishlist: (productId: string, productName: string) => void;
+  removeFromWishlist: (productId: string, productName: string) => void;
+  toggleWishlist: (productId: string, productName: string) => void;
   clearWishlist: () => void;
-  wishlistCount: number;
 }
 
 const WishlistContext = createContext<WishlistContextType | undefined>(undefined);
@@ -20,72 +20,73 @@ const WishlistContext = createContext<WishlistContextType | undefined>(undefined
 export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
 
-  // Load from localStorage on mount
+  // Load wishlist from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("app_wishlist_v1");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setWishlist(parsed);
-        }
+      const savedWishlist = localStorage.getItem("app_wishlist_v1");
+      if (savedWishlist) {
+        setWishlist(JSON.parse(savedWishlist));
       }
     } catch (error) {
-      console.warn("Failed to load wishlist from localStorage:", error);
+      console.error("Failed to load wishlist:", error);
+      setWishlist([]);
     }
   }, []);
 
-  // Save to localStorage whenever wishlist changes
+  // Save wishlist to localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem("app_wishlist_v1", JSON.stringify(wishlist));
-    } catch (error) {
-      console.warn("Failed to save wishlist to localStorage:", error);
-    }
+    localStorage.setItem("app_wishlist_v1", JSON.stringify(wishlist));
   }, [wishlist]);
 
-  const addToWishlist = (productId: string) => {
-    setWishlist((prev) => {
-      // Check if already in wishlist
-      if (prev.some((item) => item.productId === productId)) {
-        toast.success("موجود بالفعل في المفضلات! ❤️");
-        return prev;
-      }
-
-      const updated = [...prev, { productId, addedAt: Date.now() }];
-      toast.success("تمت الإضافة للمفضلات! ❤️");
-      return updated;
-    });
-  };
-
-  const removeFromWishlist = (productId: string) => {
-    setWishlist((prev) => {
-      const updated = prev.filter((item) => item.productId !== productId);
-      if (updated.length < prev.length) {
-        toast.success("تمت الإزالة من المفضلات");
-      }
-      return updated;
-    });
-  };
-
-  const isInWishlist = (productId: string) => {
+  const isFavorited = (productId: string) => {
     return wishlist.some((item) => item.productId === productId);
+  };
+
+  const addToWishlist = (productId: string, productName: string) => {
+    if (!isFavorited(productId)) {
+      setWishlist((prev) => [
+        ...prev,
+        { productId, addedAt: Date.now() },
+      ]);
+      toast.success(`✓ تم إضافة "${productName}" للمفضلات!`, {
+        icon: "❤️",
+      });
+    }
+  };
+
+  const removeFromWishlist = (productId: string, productName: string) => {
+    setWishlist((prev) => prev.filter((item) => item.productId !== productId));
+    toast.success(`تم إزالة "${productName}" من المفضلات`, {
+      icon: "💔",
+    });
+  };
+
+  const toggleWishlist = (productId: string, productName: string) => {
+    if (isFavorited(productId)) {
+      removeFromWishlist(productId, productName);
+    } else {
+      addToWishlist(productId, productName);
+    }
   };
 
   const clearWishlist = () => {
     setWishlist([]);
   };
 
-  const value: WishlistContextType = {
-    wishlist,
-    addToWishlist,
-    removeFromWishlist,
-    isInWishlist,
-    clearWishlist,
-    wishlistCount: wishlist.length,
-  };
-
-  return <WishlistContext.Provider value={value}>{children}</WishlistContext.Provider>;
+  return (
+    <WishlistContext.Provider
+      value={{
+        wishlist,
+        isFavorited,
+        addToWishlist,
+        removeFromWishlist,
+        toggleWishlist,
+        clearWishlist,
+      }}
+    >
+      {children}
+    </WishlistContext.Provider>
+  );
 };
 
 export const useWishlist = () => {
